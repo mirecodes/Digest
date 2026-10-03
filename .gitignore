@@ -1,0 +1,12 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Papers: input queue and generated digests stay local
+src/
+out/
+
+# Local / OS
+.claude/settings.local.json
+.DS_Store

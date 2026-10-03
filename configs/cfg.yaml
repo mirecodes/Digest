@@ -1,0 +1,10 @@
+# Output root for paper folders.
+# Empty = <project>/out. Relative paths resolve from the project root; absolute paths and ~ work too
+# (e.g. a folder inside an Obsidian vault). The folder structure below src/ is mirrored here.
+out_dir:
+
+# Max words kept from a long title in the paper name (stopwords dropped).
+title_words: 5
+
+# Max papers taken from src/ per run when no -n NAME is given. 0 or empty = no limit.
+max_papers: 5
