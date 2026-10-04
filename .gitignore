@@ -7,6 +7,12 @@ __pycache__/
 src/
 out/
 
+# Viewer frontend
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+
 # Local / OS
 .claude/settings.local.json
 .DS_Store

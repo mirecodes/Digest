@@ -23,3 +23,10 @@ src/               input queue; a PDF is moved out once prepared (subfolders are
 - A digest is not done while `scripts/internal/verify.sh "<paper folder>"` shows ERRORs.
 - After changing `functions/`, keep `scripts/internal/selftest.sh` passing.
 - Do not modify `functions/`, `scripts/`, or `.claude/skills/` unless the user asks.
+
+## Viewer
+- Plan: docs/viewer-plan.md. Work phase by phase; each phase must pass its acceptance, selftest.sh, and viewer_test.sh.
+- Never generate paper content (translations, highlights, figure notes) in code; tests use fixtures and PAPER_VIEWER_LLM=fake. No real LLM calls in tests.
+- Pre-generated annotations are written only via /paper-annotate (or translate_page), then verify_annotations.sh, then build_viewer.sh.
+- Coordinates: PDF points, top-left origin, 1-based pages (docs/viewer-plan.md §4.1).
+- Record design decisions in docs/decisions.md.

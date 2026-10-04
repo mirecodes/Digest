@@ -6,14 +6,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-import pymupdf
-
 from functions.extract_pdf import extract
+from functions.fixtures import build_foonet
 from functions.paper_name import Meta, find_arxiv_id, format_name
 from functions.prepare import SRC_DIR, select, target_dir
 from functions.verify import OUTPUT_KINDS, WORK_DIR, output_path, verify_paper
-
-FILLER = "filler text " * 30
 
 GOOD_EVIDENCE = """### E1
 - category: problem
@@ -83,21 +80,7 @@ EXPECTED_BAD_WARNINGS = ["number without a source"]
 def build_paper(root: Path) -> Path:
     paper = root / "out" / "Demo (2024)"
     (paper / WORK_DIR).mkdir(parents=True)
-    doc = pymupdf.open()
-    doc.new_page().insert_text(
-        (50, 72),
-        "Abstract. We propose FooNet, a sparse attention model.\n"
-        "Existing methods scale quadratically with sequence length,\n"
-        "which limits long-context modeling.\n" + FILLER,
-        fontsize=9,
-    )
-    doc.new_page().insert_text(
-        (50, 72),
-        "Table 2: Results on LRA. FooNet achieves 61.4 average accuracy,\n"
-        "compared to 54.4 for the Transformer baseline.\n" + FILLER,
-        fontsize=9,
-    )
-    doc.save(paper / "paper.pdf")
+    build_foonet(paper / "paper.pdf")
     return paper
 
 
@@ -151,7 +134,7 @@ def main() -> int:
         paper = build_paper(Path(tmp))
 
         stats = extract(paper / "paper.pdf", paper / WORK_DIR)
-        if stats["pages"] != 2 or stats["scanned"]:
+        if stats["pages"] != 3 or stats["scanned"]:
             failures.append(f"extract: unexpected stats {stats}")
 
         write_case(paper, GOOD_EVIDENCE, GOOD_OUTPUT)

@@ -13,10 +13,10 @@ Exit code: 0 = pass (warnings allowed), 1 = errors found.
 import argparse
 import re
 import sys
-import unicodedata
 from pathlib import Path
 
-PAGE_RE = re.compile(r"<!-- PAGE (\d+) -->(.*?)(?=<!-- PAGE \d+ -->|\Z)", re.S)
+from functions.textmatch import load_pages, loose
+
 EVID_BLOCK_RE = re.compile(r"^###\s+(E\d+)\s*$(.*?)(?=^###\s+E\d+\s*$|\Z)", re.M | re.S)
 CITE_RE = re.compile(r"\[(E\d+)(?:\s*,\s*p\.\s*(\d+))?[^\]]*\]")
 CALC_RE = re.compile(r"\[CALC:[^\]]*\]")
@@ -33,17 +33,6 @@ WORK_DIR = ".work"
 OUTPUT_KINDS = ("report", "summary")
 LANGS = ("ko", "en")
 MIN_QUOTE_LEN = 15  # characters after loose normalization
-
-
-def loose(s: str) -> str:
-    """Normalize text so line breaks, hyphenation, spacing and symbols do not affect matching."""
-    s = unicodedata.normalize("NFKC", s).lower()
-    return re.sub(r"[^0-9a-z가-힣]", "", s)
-
-
-def load_pages(path: Path) -> dict[int, str]:
-    raw = path.read_text(encoding="utf-8")
-    return {int(m.group(1)): loose(m.group(2)) for m in PAGE_RE.finditer(raw)}
 
 
 def load_evidence(path: Path) -> dict[str, dict]:
