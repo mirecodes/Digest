@@ -3,17 +3,17 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function openDemo(page: Page) {
   await page.goto("/");
-  await page.locator("tr", { hasText: "Demo (2024)" }).getByRole("button").click();
+  await page.locator("[data-paper-id]", { hasText: "Demo (2024)" }).getByRole("button").click();
   await expect(page.locator('.pdf-page[data-page="1"] canvas')).toBeVisible();
   await expect(page.locator('.tr-card[data-page="3"]')).toBeVisible();
 }
 
 const top = async (page: Page, selector: string) => (await page.locator(selector).boundingBox())!.y;
 
-/** Wheel over a pane until `selector` (a page in that pane) sits on the pane's reference line (30% height). */
+/** Wheel over a pane until `selector` (a page in that pane) sits just above the pane's reference line (30% height). */
 async function wheelToRef(page: Page, pane: string, selector: string) {
   const box = (await page.locator(pane).boundingBox())!;
-  const ref = box.y + 0.3 * box.height;
+  const ref = box.y + 0.3 * box.height - 20; // 20px into the page, so the line is not on the page edge
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   for (let i = 0; i < 5; i++) {
     const delta = (await top(page, selector)) - ref;

@@ -113,3 +113,10 @@
 - 방법: Playwright(Chromium headless, 이 Mac)에서 50페이지 합성 논문(페이지당 약 1000단어, 5페이지마다 그림)을 열고 `PerformanceObserver`로 `longtask`(> 50ms)와 `long-animation-frame`을 수집. 먼저 페이지 안에서 120ms busy loop를 실행해 관찰자가 실제로 잡는지 확인한다 (CDP `evaluate`로 돌린 busy loop는 잡히지 않아 처음 측정이 무의미했던 것을 발견하고 고침).
 - 결과: PDF 패널·번역 패널 각각 처음부터 끝까지(16ms마다 300px wheel) 스크롤 시 long task 0, long animation frame 0. 별도로 초기 로딩(50장 카드 측정 포함)과 읽는 속도 스크롤(150ms마다 400px)에서도 long task 0.
 - Chrome DevTools Performance 패널을 사람이 보는 수동 측정은 하지 않았다. 위 자동 측정이 `perf.spec.ts`로 매번 돈다.
+
+### D2-7. 디자인 시스템 적용 (사용자 요청, `design.md`)
+- 토큰(색·그림자·라운드), 서체 스택(Toss Product Sans → Pretendard → Apple SD Gothic Neo → Noto Sans KR), 굵기 400/600 두 가지, 버튼 7px·카드 12px, 입력창은 회색 채움 + 포커스 시 2px 파란 링, 눌림 scale(0.98)을 `styles.css`에 적용.
+- 단색 파랑은 주요 동작(라이브러리 `열기`)에만 쓴다. 켜진 토글(사이드바·번역 패널·싱크)은 연한 파랑 보조 버튼, 꺼진 토글은 회색 고스트. 헤더의 이모지(🔒)는 선 아이콘으로 교체.
+- 라이브러리는 design.md의 중앙 레인을 따르되 칩이 많아 480px 대신 720px로, 64px 행·헤어라인 구분선 목록으로 바꿨다.
+- 리더는 원문·번역을 나란히 보는 데스크톱 도구라 모바일 우선 480px 레인은 적용하지 않고 토큰·컴포넌트만 적용했다. PDF 페이지는 문서 모양 유지를 위해 4px, 번역 카드는 12px 라운드.
+- 웹 폰트는 내려받지 않는다 (로컬 전용 앱, 시스템 폰트 폴백).
