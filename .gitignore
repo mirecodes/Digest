@@ -4,8 +4,8 @@ __pycache__/
 *.pyc
 
 # Papers: input queue and generated digests stay local
-src/
-out/
+/src/
+/out/
 
 # Viewer frontend
 web/node_modules/
