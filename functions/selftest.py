@@ -1,14 +1,20 @@
-"""Self-test: build a tiny synthetic paper and confirm extract + verify + naming behave as expected.
+"""Self-test: build a tiny synthetic paper and confirm extract + verify + naming + viewer layout behave as expected.
 
 Usage (via wrapper): scripts/internal/selftest.sh
 """
+import json
 import sys
 import tempfile
 from pathlib import Path
 
+import pymupdf
+
+from functions.anchor import anchor_quote
 from functions.extract_pdf import extract
 from functions.fixtures import build_foonet
+from functions.layout import build_layout
 from functions.paper_name import Meta, find_arxiv_id, format_name
+from functions.papers import paper_id, resolve_for_annotate, scan
 from functions.prepare import SRC_DIR, select, target_dir
 from functions.verify import OUTPUT_KINDS, WORK_DIR, output_path, verify_paper
 
@@ -77,11 +83,10 @@ EXPECTED_BAD_ERRORS = [
 EXPECTED_BAD_WARNINGS = ["number without a source"]
 
 
-def build_paper(root: Path) -> Path:
+def build_paper(root: Path) -> tuple[Path, dict]:
     paper = root / "out" / "Demo (2024)"
     (paper / WORK_DIR).mkdir(parents=True)
-    build_foonet(paper / "paper.pdf")
-    return paper
+    return paper, build_foonet(paper / "paper.pdf")
 
 
 def write_case(paper: Path, evidence: str, report: str) -> None:
@@ -126,12 +131,108 @@ def check_selection(failures: list) -> None:
             failures.append(f"selection: expected {want!r}, got {got!r}")
 
 
+def iou(a, b) -> float:
+    ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0])) * max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - ix
+    return ix / union if union else 0.0
+
+
+def check_layout(paper: Path, truth: dict, failures: list) -> None:
+    def fail(msg):
+        failures.append(f"layout: {msg}")
+
+    build_layout(paper, force=True)
+    lay = paper / WORK_DIR / "layout"
+    first = (lay / "blocks.json").read_bytes()
+    build_layout(paper, force=True)
+    if (lay / "blocks.json").read_bytes() != first:
+        fail("blocks.json differs between two runs")
+    data = json.loads(first)
+    figures = {f["label"]: f for f in json.loads((lay / "figures.json").read_text(encoding="utf-8"))["figures"]}
+    blocks = [b for p in data["pages"] for b in p["blocks"]]
+
+    for p in data["pages"]:
+        if p["columns"] != truth["columns"][p["page"]]:
+            fail(f"p.{p['page']}: expected {truth['columns'][p['page']]} columns, got {p['columns']}")
+        col0 = [b["order"] for b in p["blocks"] if b["column"] == 0 and b["kind"] == "paragraph"]
+        col1 = [b["order"] for b in p["blocks"] if b["column"] == 1 and b["kind"] == "paragraph"]
+        if col0 and col1 and max(col0) > min(col1):
+            fail(f"p.{p['page']}: reading order does not finish column 0 before column 1")
+    for prefix, kind in truth["kinds"].items():
+        got = [b["kind"] for b in blocks if b["text"].startswith(prefix)]
+        if not got or any(k != kind for k in got):
+            fail(f"block {prefix!r}: expected {kind}, got {got}")
+    if sum(b["kind"] == "caption" for b in blocks) != 3:
+        fail("expected 3 captions")
+    for label, (page, rect) in truth["figures"].items():
+        f = figures.get(label)
+        if not f or f["page"] != page:
+            fail(f"{label} not detected on p.{page}")
+            continue
+        if label == "Table 1":
+            if not all(f["bbox"][i] <= rect[i] + 1 for i in (0, 1)) or not all(f["bbox"][i] >= rect[i] - 1 for i in (2, 3)):
+                fail(f"Table 1 bbox {f['bbox']} does not contain the table {rect}")
+        elif iou(f["bbox"], rect) < (0.8 if label == "Figure 2" else 0.7):
+            fail(f"{label} IoU {iou(f['bbox'], rect):.2f} too low ({f['bbox']} vs {rect})")
+    if any(b["translate"] for b in blocks if b["kind"] in ("figure_text", "table_text")):
+        fail("figure_text/table_text blocks must not be translated")
+    refs = figures.get("Figure 1", {}).get("refs", [])
+    body = {b["id"] for b in blocks if b["kind"] == "paragraph"}
+    if not any(r["page"] == 2 and r["block"] in body for r in refs):
+        fail(f"Figure 1 refs should include the p.2 body block, got {refs}")
+    if not (paper / WORK_DIR / "translate" / "p001.src.md").is_file():
+        fail("translate/p001.src.md not written")
+    if not (lay / "figures" / f"{figures.get('Figure 1', {}).get('id')}.png").is_file():
+        fail("Figure 1 crop not rendered")
+
+
+def check_anchor(pdf: Path, truth: dict, failures: list) -> None:
+    doc = pymupdf.open(pdf)
+    q = truth["quotes"]
+    a = anchor_quote(doc[0], q["hyphen"][1])
+    if not a or len(a["rects"]) != 2 or a["rects"][0][1] == a["rects"][1][1]:
+        failures.append(f"anchor: hyphenated quote should give 2 rects on different lines, got {a}")
+    if not anchor_quote(doc[0], q["ligature"][1]):
+        failures.append("anchor: ligature quote not matched")
+    if anchor_quote(doc[0], q["result"][1]) is not None:
+        failures.append("anchor: a p.2 quote must not anchor on p.1")
+    a = anchor_quote(doc[0], q["repeated"][1])
+    if not a or not a["ambiguous"]:
+        failures.append(f"anchor: repeated quote should be ambiguous, got {a}")
+    if anchor_quote(doc[0], q["problem"][1]) is None or anchor_quote(doc[1], q["result"][1]) is None:
+        failures.append("anchor: evidence quotes should anchor on their pages")
+
+    # rotated page: rects must land on the text as rendered (pdf.js renders rotation like MuPDF)
+    rot = pymupdf.open()
+    page = rot.new_page(width=612, height=792)
+    page.insert_text((72, 100), "Rotated page anchor test sentence", fontsize=14)
+    page.set_rotation(90)
+    a = anchor_quote(page, "anchor test sentence")
+    if not a:
+        failures.append("anchor: rotated page quote not matched")
+        return
+    r = pymupdf.Rect(a["rects"][0])
+    pix = page.get_pixmap(dpi=72, clip=r)
+    if not (page.rect.contains(r) and min(pix.samples) < 128):
+        failures.append(f"anchor: rotated page rect {r} does not cover the rendered text")
+
+
+def check_papers(root: Path, paper: Path, failures: list) -> None:
+    entries = scan(root)
+    if [e.name for e in entries] != [paper.name] or entries[0].id != paper_id(Path(paper.name)):
+        failures.append(f"papers: scan found {[e.name for e in entries]}")
+    if resolve_for_annotate(paper.name, root) != paper.resolve():
+        failures.append("papers: resolve_for_annotate by folder name failed")
+    if entries and (entries[0].num_pages != 3 or not entries[0].has_layout or entries[0].status != "ok"):
+        failures.append(f"papers: unexpected entry {entries[0]}")
+
+
 def main() -> int:
     failures = []
     check_naming(failures)
     check_selection(failures)
     with tempfile.TemporaryDirectory() as tmp:
-        paper = build_paper(Path(tmp))
+        paper, truth = build_paper(Path(tmp))
 
         stats = extract(paper / "paper.pdf", paper / WORK_DIR)
         if stats["pages"] != 3 or stats["scanned"]:
@@ -150,6 +251,10 @@ def main() -> int:
         for expected in EXPECTED_BAD_WARNINGS:
             if not any(expected in w for w in warnings):
                 failures.append(f"bad case: expected warning containing {expected!r}")
+
+        check_layout(paper, truth, failures)
+        check_anchor(paper / "paper.pdf", truth, failures)
+        check_papers(Path(tmp) / "out", paper, failures)
 
     for f in failures:
         print(f"  FAIL  {f}")

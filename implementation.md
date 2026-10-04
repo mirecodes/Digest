@@ -396,7 +396,7 @@ scripts/internal/viewer_test.sh [--e2e]
 | Phase | 내용 | 상태 |
 |---|---|---|
 | 0 | textmatch 분리, 합성 fixture, 의존성·setup | done |
-| 1 | layout (블록·단·읽기 순서·피규어 영역), anchor | planned |
+| 1 | layout (블록·단·읽기 순서·피규어 영역), anchor | done |
 | 2 | FastAPI 서버, 라이브러리, 2-pane 리더, **페이지 싱크 스크롤**, 블록 링크 | planned |
 | 3 | `/paper-annotate` skill, verify_annotations, viewer.json 번들, 전처리 job | planned |
 | 4 | 자동 하이라이트 레이어, **피규어 호버 해설 popover**, bbox 수정 | planned |
@@ -411,4 +411,12 @@ scripts/internal/viewer_test.sh [--e2e]
 - `functions/fixtures.py`: `build_foonet(pdf) -> truth`. 3페이지 합성 논문 + 정답 메타데이터. selftest가 사용.
 - `requirements.txt`: + fastapi, uvicorn[standard], httpx (`anthropic`은 Phase 5).
 - `scripts/setup.sh [--with-e2e]`: `web/package.json`이 있고 Node ≥ 20이면 `npm ci && npm run build`, 없으면 경고만. 반복 실행 안전.
+
+**Phase 1**
+- `scripts/internal/layout.sh "<paper folder>" [--force]` → `.work/layout/blocks.json`, `figures.json`, `figures/<fid>.png`, `.work/translate/pNNN.src.md`. 최신이면 건너뜀 (`(up to date)`).
+- `scripts/internal/anchor_check.sh "<paper folder>"` → evidence quote 앵커링 성공률.
+- `functions/papers.py`: `scan()`, `paper_id()`, `resolve_for_annotate()`, `viewer_cfg()`(cfg.yaml `viewer:` + 기본값).
+- 실측(vault 9편): 피규어/표 캡션 검출 실질 누락 0, low_conf 0, 앵커링 533/533 (100%). 논문당 0.5–1.5초.
+  상세와 휴리스틱 보정 내역은 `docs/decisions.md` Phase 1.
+- 수동 확인: vault의 `Robust Recovery Controller Quadrupedal Robot (2019)`에 실제 실행함 (`pages=9 blocks=172 figures=13 low_conf=0`).
 
