@@ -1,0 +1,142 @@
+"""Local web server for the Paper Viewer: REST API under /api plus the built frontend (web/dist).
+
+Binds to 127.0.0.1 only (scripts/viewer.sh). Files are served only from paper folders found by scanning the
+output root; paths that resolve outside their paper folder are refused. API: docs/viewer-plan.md §9.
+
+Environment: PAPER_VIEWER_OUT overrides the output root (tests use a temporary one).
+"""
+import hashlib
+import re
+from pathlib import Path
+
+import pymupdf
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+from functions.build_viewer import ensure_viewer, viewer_root
+from functions.papers import find_pdf, is_evicted, scan, viewer_cfg
+from functions.verify import WORK_DIR
+
+DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
+PDFJS = Path(__file__).resolve().parents[2] / "web" / "node_modules" / "pdfjs-dist"
+PDFJS_KINDS = {"standard_fonts", "cmaps", "wasm", "iccs"}
+PDFJS_NAME_RE = re.compile(r"^[\w.\-]+$")
+FIG_ID_RE = re.compile(r"^fig-p\d+-u?\d+$")
+MAX_DPI = 300
+NO_BUILD_HTML = """<!doctype html><meta charset="utf-8"><title>Paper Viewer</title>
+<p style="font-family:sans-serif">The viewer frontend is not built yet. Run <code>scripts/setup.sh</code> (needs Node &ge; 20).</p>"""
+
+app = FastAPI(title="Paper Viewer", docs_url=None, redoc_url=None)
+_papers: dict[str, Path] = {}
+
+
+@app.exception_handler(HTTPException)
+async def _error(_: Request, exc: HTTPException):
+    return JSONResponse({"error": exc.detail, "detail": None}, status_code=exc.status_code)
+
+
+def _rescan() -> list:
+    entries = scan(viewer_root())
+    _papers.clear()
+    _papers.update({e.id: Path(e.folder) for e in entries})
+    return entries
+
+
+def _folder(pid: str) -> Path:
+    if pid not in _papers:
+        _rescan()
+    if pid not in _papers:
+        raise HTTPException(404, "unknown paper")
+    folder = _papers[pid]
+    if is_evicted(folder):
+        raise HTTPException(409, "the PDF is not downloaded from iCloud (evicted)")
+    return folder
+
+
+def _inside(path: Path | None, folder: Path) -> Path:
+    """The resolved path, if it exists and stays inside the paper folder (no symlink or '..' escape)."""
+    if path is None:
+        raise HTTPException(404, "not found")
+    real = path.resolve()
+    if not real.is_file() or folder.resolve() not in real.parents:
+        raise HTTPException(404, "not found")
+    return real
+
+
+@app.get("/api/papers")
+def papers():
+    return [e.to_dict() for e in _rescan()]
+
+
+@app.get("/api/config")
+def config():
+    cfg = viewer_cfg()
+    return {k: cfg[k] for k in ("target_lang", "llm_backend", "highlight_default_categories")}
+
+
+@app.get("/api/papers/{pid}/viewer.json")
+def viewer_json(pid: str):
+    folder = _folder(pid)
+    return FileResponse(ensure_viewer(folder, viewer_root()), media_type="application/json")
+
+
+@app.get("/api/papers/{pid}/pdf")
+def pdf(pid: str):
+    folder = _folder(pid)
+    return FileResponse(_inside(find_pdf(folder), folder), media_type="application/pdf")   # Range requests -> 206
+
+
+@app.get("/api/papers/{pid}/figures/{fid}.png")
+def figure(pid: str, fid: str):
+    folder = _folder(pid)
+    if not FIG_ID_RE.match(fid):
+        raise HTTPException(404, "not found")
+    return FileResponse(_inside(folder / WORK_DIR / "layout" / "figures" / f"{fid}.png", folder), media_type="image/png")
+
+
+@app.get("/api/papers/{pid}/crop")
+def crop(pid: str, page: int, bbox: str, dpi: int = 200):
+    folder = _folder(pid)
+    try:
+        rect = pymupdf.Rect([float(v) for v in bbox.split(",")])
+    except ValueError:
+        raise HTTPException(400, "bbox must be x0,y0,x1,y1")
+    if not 36 <= dpi <= MAX_DPI:
+        raise HTTPException(400, f"dpi must be 36..{MAX_DPI}")
+    doc = pymupdf.open(_inside(find_pdf(folder), folder))
+    if not 1 <= page <= len(doc):
+        raise HTTPException(400, "page out of range")
+    bounds = doc[page - 1].rect + (-0.5, -0.5, 0.5, 0.5)
+    if rect.is_empty or not bounds.contains(rect):
+        raise HTTPException(400, "bbox outside the page")
+    key = hashlib.sha1(f"{page}|{','.join(f'{v:.2f}' for v in rect)}|{dpi}".encode()).hexdigest()[:16]
+    out = folder / WORK_DIR / "layout" / "crops" / f"{key}.png"
+    if not out.exists():
+        out.parent.mkdir(parents=True, exist_ok=True)
+        doc[page - 1].get_pixmap(clip=rect & doc[page - 1].rect, dpi=dpi).save(out)
+    return FileResponse(out, media_type="image/png")
+
+
+# ---- frontend (single-page app: / and /r/<id> both serve index.html)
+@app.get("/pdfjs/{kind}/{name}", include_in_schema=False)
+def pdfjs_data(kind: str, name: str):
+    """pdf.js data files (standard fonts, CMaps, wasm decoders, ICC profiles) from the installed pdfjs-dist."""
+    if kind not in PDFJS_KINDS or not PDFJS_NAME_RE.match(name):
+        raise HTTPException(404, "not found")
+    path = PDFJS / kind / name
+    if not path.is_file():
+        raise HTTPException(404, "not found")
+    return FileResponse(path)
+
+
+if (DIST / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
+
+
+@app.get("/{path:path}", include_in_schema=False)
+def spa(path: str):
+    if path.startswith("api/"):
+        raise HTTPException(404, "not found")
+    index = DIST / "index.html"
+    return FileResponse(index) if index.is_file() else HTMLResponse(NO_BUILD_HTML)

@@ -3,6 +3,7 @@
 Usage (via wrapper): scripts/internal/selftest.sh
 """
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -227,6 +228,39 @@ def check_papers(root: Path, paper: Path, failures: list) -> None:
         failures.append(f"papers: unexpected entry {entries[0]}")
 
 
+def check_server(root: Path, failures: list) -> None:
+    os.environ["PAPER_VIEWER_OUT"] = str(root)
+    os.environ["PAPER_VIEWER_LLM"] = "fake"
+    from fastapi.testclient import TestClient
+    from functions.viewer.server import app
+
+    client = TestClient(app)
+    papers = client.get("/api/papers").json()
+    if len(papers) != 1:
+        failures.append(f"server: /api/papers should list 1 paper, got {papers}")
+        return
+    api = f"/api/papers/{papers[0]['id']}"
+    data = client.get(f"{api}/viewer.json").json()
+    if data.get("paper", {}).get("num_pages") != 3 or not data.get("blocks") or len(data.get("figures", [])) != 3:
+        failures.append("server: viewer.json is incomplete")
+    fid = data["figures"][0]["id"] if data.get("figures") else "fig-p2-0"
+    cases = [
+        (client.get(f"{api}/pdf").status_code, 200, "pdf"),
+        (client.get(f"{api}/pdf", headers={"Range": "bytes=0-99"}).status_code, 206, "pdf range"),
+        (client.get(f"{api}/figures/{fid}.png").status_code, 200, "figure png"),
+        (client.get(f"{api}/figures/..%2F..%2Fpages.md.png").status_code, 404, "figure path escape"),
+        (client.get(f"{api}/figures/fig-p2-0%2F..%2F..%2F..%2Fpages.md.png").status_code, 404, "figure path escape 2"),
+        (client.get("/api/papers/000000000000/pdf").status_code, 404, "unknown paper"),
+        (client.get(f"{api}/crop", params={"page": 2, "bbox": "85,100,245,220"}).status_code, 200, "crop"),
+        (client.get(f"{api}/crop", params={"page": 2, "bbox": "0,0,9999,10"}).status_code, 400, "crop outside page"),
+        (client.get(f"{api}/crop", params={"page": 9, "bbox": "0,0,10,10"}).status_code, 400, "crop page range"),
+        (client.get(f"{api}/crop", params={"page": 1, "bbox": "0,0,10,10", "dpi": 2000}).status_code, 400, "crop dpi"),
+    ]
+    for got, want, name in cases:
+        if got != want:
+            failures.append(f"server: {name}: expected {want}, got {got}")
+
+
 def main() -> int:
     failures = []
     check_naming(failures)
@@ -255,6 +289,7 @@ def main() -> int:
         check_layout(paper, truth, failures)
         check_anchor(paper / "paper.pdf", truth, failures)
         check_papers(Path(tmp) / "out", paper, failures)
+        check_server(Path(tmp) / "out", failures)
 
     for f in failures:
         print(f"  FAIL  {f}")

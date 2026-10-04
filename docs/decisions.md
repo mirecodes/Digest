@@ -72,3 +72,44 @@
 - 캡션 기준 피규어/표 검출: captions.md의 라벨(구두점 규칙 적용) 82개 중 79개 검출. 놓친 3개는 모두 본문 문장이 줄 첫머리에 온 경우("…in Figure 8. In our…")로, 실제 캡션은 다른 페이지에서 검출됨 → 실질 누락 0. 로마 숫자 표 12개 추가 검출. low_conf(< 0.6) 0개.
 - 앵커링: evidence quote 533/533 (100%), ambiguous 0.
 - 속도: 논문당 0.5–1.5초 (15페이지 기준 1.4초).
+
+---
+
+## Phase 2
+
+### D2-1. 프론트엔드 버전 (정확히 고정)
+- React 19.3.0, Vite 8.3.2, TypeScript 7.0.2, pdfjs-dist 6.4.299, zustand 5.0.15, vitest 5.0.3, @playwright/test 1.63.0.
+- §2는 React 18이라고 했지만 18에 의존하는 기능이 없고 19가 현재 버전이라 19를 썼다. TS 7(`tsc`)이 실제로 타입 오류를 잡는 것을 확인했다.
+- `react-markdown`/KaTeX 등 Markdown 의존성은 AI 텍스트를 렌더하는 Phase 4/5에서 추가한다. 라우터 라이브러리는 쓰지 않는다 (라우트 2개: History API로 충분).
+
+### D2-2. pdf.js 데이터 파일 제공 방식
+- 내장되지 않은 base-14 글꼴(fixture의 Helvetica 등), CMap, wasm 디코더, ICC 파일이 필요하다. 빌드에 복사하지 않고 FastAPI가 `web/node_modules/pdfjs-dist/{standard_fonts,cmaps,wasm,iccs}`를 `/pdfjs/<kind>/<name>`으로 직접 서빙한다 (dev 모드는 Vite가 `/pdfjs`를 프록시). 이름은 정규식으로 검증.
+- 전제: `web/node_modules`가 있어야 한다 (`setup.sh`가 `npm ci`로 항상 만든다).
+- pdf.js 6의 text layer는 조상 요소의 CSS 변수 `--total-scale-factor`, `--scale-round-x/y`로 크기를 정한다. `pdf_viewer.css` 전체(4천 줄) 대신 `.textLayer` 규칙만 `styles.css`에 옮겼다.
+
+### D2-3. 서버
+- 출력 루트는 `PAPER_VIEWER_OUT` 환경변수가 있으면 그것을 쓴다 (selftest·e2e가 임시 루트를 쓰기 위해). 없으면 cfg.yaml의 `out_dir`.
+- PDF Range 요청은 Starlette `FileResponse`가 기본 지원(206)하므로 별도 구현 없음.
+- 파일 응답은 스캔으로 찾은 논문 폴더 하위만: 피규어 ID 정규식 검증 + resolve 후 폴더 안인지 확인(symlink·`..` 탈출 거부). iCloud evicted 논문은 409.
+- `/crop`: bbox는 페이지 rect ±0.5pt 안이어야 하고 dpi는 36–300. 결과는 `layout/crops/<sha1>.png`에 캐시.
+- `httpx` 대신 `httpx2`: Starlette 1.7의 TestClient가 `httpx` 사용을 deprecated로 경고한다.
+- Library의 `[전처리]` 버튼은 job 큐(`jobs.py`)가 생기는 Phase 3에서 추가한다.
+
+### D2-4. viewer.json (Phase 2 범위)
+- layout만 묶는다: `tr`는 모두 null, `highlights` `[]`, `evidence` `{}`, `figures[].note` null. evidence 파서 공용화는 Phase 3.
+- 압축 JSON(키 정렬). 신선도 검사: PDF, blocks/figures.json, report, evidence, highlights, figure_notes, overrides, `*.ko.md` 중 하나라도 더 새로우면 재빌드 (layout 자체도 먼저 최신화).
+- report 헤더(`# 제목`, `> 저자 · 학회, 연도 [E#, p.N]`)에서 title/authors/venue_year를 파싱하고 인용 마커는 지운다.
+
+### D2-5. 리더 구현 선택
+- 가상화: IntersectionObserver 대신, 페이지 top을 이미 알고 있으므로 scrollTop에서 이진 탐색으로 보이는 페이지를 계산하고 ±2페이지만 canvas+text layer를 렌더한다 (결정적이고 관찰자 불필요). 범위 밖 페이지는 언마운트하며 canvas 비트맵을 즉시 해제.
+- 싱크 driver 판정: §8.4 그대로(wheel/pointerdown/touchstart/keydown 후 150ms) + 포인터를 누르고 있는 동안(스크롤바 드래그)은 계속 active. `mapRef`는 첫 페이지 위·마지막 페이지 아래에서 오프셋을 그대로 옮겨 역함수 불변식이 전 구간에서 성립한다.
+- 줌·창 크기·번역 패널 토글로 scale이 바뀌면 reference line 위치를 `mapRef`로 유지한다. 측정 전(폭 0) 레이아웃은 기준으로 쓰지 않는다 (처음에 2페이지로 열리던 버그의 원인).
+- 번역 카드의 피규어 위치: 피규어가 캡션보다 위면 캡션 바로 앞, 아래면 바로 뒤. 캡션 없는 피규어는 같은 단에서 y가 처음으로 같거나 큰 항목 앞.
+- 번역 블록 클릭 → PDF만 그 블록 중앙으로 이동 + flash. 번역 패널은 다음 사용자 스크롤 때 다시 맞춰진다 (= §8.5의 "싱크를 잠깐 멈추고 재개").
+- hover 강조는 페이지 단위 selector로 구독해, 커서가 움직여도 해당 카드만 다시 그린다.
+- 단축키 중 구현이 한 줄인 T/S/[/J/K//는 지금 넣었다. 나머지(H, Esc 전체, Cmd+드래그)는 해당 기능 Phase에서.
+
+### D2-6. 성능 측정 (Phase 2 Acceptance)
+- 방법: Playwright(Chromium headless, 이 Mac)에서 50페이지 합성 논문(페이지당 약 1000단어, 5페이지마다 그림)을 열고 `PerformanceObserver`로 `longtask`(> 50ms)와 `long-animation-frame`을 수집. 먼저 페이지 안에서 120ms busy loop를 실행해 관찰자가 실제로 잡는지 확인한다 (CDP `evaluate`로 돌린 busy loop는 잡히지 않아 처음 측정이 무의미했던 것을 발견하고 고침).
+- 결과: PDF 패널·번역 패널 각각 처음부터 끝까지(16ms마다 300px wheel) 스크롤 시 long task 0, long animation frame 0. 별도로 초기 로딩(50장 카드 측정 포함)과 읽는 속도 스크롤(150ms마다 400px)에서도 long task 0.
+- Chrome DevTools Performance 패널을 사람이 보는 수동 측정은 하지 않았다. 위 자동 측정이 `perf.spec.ts`로 매번 돈다.

@@ -397,7 +397,7 @@ scripts/internal/viewer_test.sh [--e2e]
 |---|---|---|
 | 0 | textmatch 분리, 합성 fixture, 의존성·setup | done |
 | 1 | layout (블록·단·읽기 순서·피규어 영역), anchor | done |
-| 2 | FastAPI 서버, 라이브러리, 2-pane 리더, **페이지 싱크 스크롤**, 블록 링크 | planned |
+| 2 | FastAPI 서버, 라이브러리, 2-pane 리더, **페이지 싱크 스크롤**, 블록 링크 | done |
 | 3 | `/paper-annotate` skill, verify_annotations, viewer.json 번들, 전처리 job | planned |
 | 4 | 자동 하이라이트 레이어, **피규어 호버 해설 popover**, bbox 수정 | planned |
 | 5 | LLM 백엔드, 선택/영역 설명, 선택·페이지 번역, 채팅, grounding 배지 | planned |
@@ -419,4 +419,12 @@ scripts/internal/viewer_test.sh [--e2e]
 - 실측(vault 9편): 피규어/표 캡션 검출 실질 누락 0, low_conf 0, 앵커링 533/533 (100%). 논문당 0.5–1.5초.
   상세와 휴리스틱 보정 내역은 `docs/decisions.md` Phase 1.
 - 수동 확인: vault의 `Robust Recovery Controller Quadrupedal Robot (2019)`에 실제 실행함 (`pages=9 blocks=172 figures=13 low_conf=0`).
+
+**Phase 2**
+- `scripts/viewer.sh [--dev] [--port N] [--no-open]` → http://127.0.0.1:8765. 라이브러리 → `열기` → 리더 (`/r/<id>?page=N` 딥링크).
+- `scripts/internal/build_viewer.sh "<paper folder>"` → `.work/viewer.json` (서버는 요청 시 stale이면 자동 재빌드).
+- `scripts/internal/viewer_test.sh [--e2e]`: vitest 16개 + (`--e2e`) 빌드 → 임시 out_root에 합성 논문 2편(`python -m functions.fixtures <root>`) → Playwright 5개 (§12.3의 1–3, 9 + 50페이지 성능).
+- 리더: PDF(가상화, 선택 가능한 text layer) | 번역 카드(번역 없으면 원문 회색 이탤릭, 피규어·수식은 이미지) — 페이지 싱크(🔒/`S`), 블록 hover 상호 강조, 번역 블록 클릭 → PDF 이동, PDF `Alt+클릭` → 번역 이동, 페이지 표시기 클릭 → 이동, 줌(−/+/맞춤), 아웃라인, 블록 검색(`/`), 패널 비율 드래그. 단축키 T/S/[/J/K//.
+- 실측: 50페이지 스크롤 시 long task 0, long animation frame 0 (두 패널 모두, 측정 방법은 decisions.md D2-6).
+- 수동 확인 절차: `scripts/setup.sh` → `scripts/viewer.sh` → 라이브러리에서 논문 열기 → 왼쪽을 스크롤하면 오른쪽 카드가 같은 페이지 위치로 따라오는지, 🔒를 끄면 멈추는지, 오른쪽 블록에 올리면 왼쪽에 파란 외곽선이 뜨는지 확인. 아직 번역이 없으므로 오른쪽은 원문 회색 표시가 정상(번역은 Phase 3).
 

@@ -9,7 +9,12 @@ expected block kinds, test quotes). Layout (US letter, two columns at x 72-297 /
   p3  spanning raster Figure 2 + caption, Table 1 (caption above a ruled 3x3 grid) in the left
       column, References [1] [2] in the right column.
 Every page has the header "Preprint" and a page-number footer.
+
+build_long(pdf, pages) writes a plain two-column paper for scroll-performance tests.
+CLI (end-to-end tests): python -m functions.fixtures <out_root>   -> "Demo (2024)" and "long/Long Paper (2024)",
+both prepared (pages.md, layout) as if digested.
 """
+import sys
 from pathlib import Path
 
 import pymupdf
@@ -170,3 +175,44 @@ def build_foonet(pdf: Path) -> dict:
             "problem": (1, PROBLEM_QUOTE), "result": (2, RESULT_QUOTE), "repeated": (1, REPEATED_QUOTE),
         },
     }
+
+
+def build_long(pdf: Path, pages: int = 50) -> None:
+    """A text-dense two-column paper with a numbered heading per page and a vector figure every fifth page."""
+    doc = pymupdf.open()
+    paragraph = " ".join([P1_RIGHT, P2_LEFT, P3_LEFT])
+    for n in range(1, pages + 1):
+        p = doc.new_page(width=W, height=H)
+        _frame(p, n)
+        p.insert_text((LEFT, 80), f"{n} Section {n}", fontname="hebo", fontsize=10)
+        top = 100
+        if n % 5 == 0:
+            p.draw_rect(pymupdf.Rect(LEFT, 100, LEFT + COL_W, 220), width=1)
+            p.insert_text((LEFT, 236), f"Figure {n // 5}: Synthetic figure on page {n}.", fontname="helv", fontsize=BODY)
+            top = 260
+        lines = _wrap(paragraph)
+        for x, y in ((LEFT, top), (RIGHT, 100)):
+            i = 0
+            while y < 730:
+                _lines(p, x, y, [lines[i % len(lines)]])
+                y, i = y + LEAD + (10 if i % 12 == 11 else 0), i + 1   # a paragraph break every 12 lines
+    pdf.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(pdf)
+
+
+def prepare_e2e(root: Path) -> None:
+    """Two digested-looking papers under root (PDF, .work/pages.md, layout) for the viewer end-to-end tests."""
+    from functions.extract_pdf import extract
+    from functions.layout import build_layout
+
+    for folder, build in ((root / "Demo (2024)", build_foonet), (root / "long" / "Long Paper (2024)", build_long)):
+        pdf = folder / f"{folder.name}.pdf"
+        build(pdf)
+        extract(pdf, folder / ".work")
+        build_layout(folder, force=True)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        sys.exit("usage: python -m functions.fixtures <out_root>")
+    prepare_e2e(Path(sys.argv[1]))

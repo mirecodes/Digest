@@ -10,6 +10,7 @@ functions/         prepare, paper_name, extract_pdf, verify, selftest
 scripts/           user entry points: setup.sh, digest.sh [-n NAME]
 scripts/internal/  prepare, verify, selftest (.sh; _env.sh is a sourced helper)
 src/               input queue; a PDF is moved out once prepared (subfolders are mirrored)
+web/               viewer frontend (React + Vite + pdf.js); docs/ viewer plan and decision log
 <out_dir>/<subfolders>/<Short Title (Year)>/
   <name>.pdf, "<name> - report.md", "<name> - summary.md"
   .work/           pages.md (citation basis), captions.md, evidence.md; hidden from Obsidian
