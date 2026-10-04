@@ -245,6 +245,8 @@ evidence.md와 같은 블록 문법 (기존 파서 재사용 가능하게):
 - note_en: Core contribution — a single policy that recovers from arbitrary falls
 ```
 
+> **변경 (decisions.md D4-7):** 하이라이트는 H 블록만, 큰 틀 카테고리 `problem | assumption | prior_work | contribution | method | result | insight | limitation`, 8–24개, 메모 = 한 줄 요약. evidence는 하이라이트하지 않는다. 아래 두 줄은 원래 계획이다.
+
 - `category` ∈ `problem | contribution | insight | method | result | limitation`.
 - 최종 하이라이트 = **evidence-derived** (evidence.md에서 category ∈ {problem, gap→problem, contribution, insight, method, result, ablation→result, limitation}, `NOT_REPORTED` 제외, `note`→`note_ko`) **+ H 블록**.
 - H 블록은 evidence가 못 다룬 핵심 문장만 추가한다 (§6 밀도 규칙).

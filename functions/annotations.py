@@ -11,10 +11,10 @@
 import re
 from pathlib import Path
 
-HIGHLIGHT_CATEGORIES = ("problem", "contribution", "insight", "method", "result", "limitation")
-# evidence categories shown as highlights, and the highlight category they map to
-EVIDENCE_TO_HIGHLIGHT = {"problem": "problem", "gap": "problem", "contribution": "contribution", "insight": "insight",
-                         "method": "method", "result": "result", "ablation": "result", "limitation": "limitation"}
+# Big-picture highlight categories, in reading order (the viewer lists them this way). Highlights are only the
+# curated H blocks; evidence quotes stay internal (report citations, figure-note chips) and are not highlighted.
+HIGHLIGHT_CATEGORIES = ("problem", "assumption", "prior_work", "contribution", "method", "result", "insight", "limitation")
+CORE_CATEGORIES = ("problem", "prior_work", "contribution", "method", "result")   # every paper should cover these
 BLOCK_MARK_RE = re.compile(r"^<!--\s*BLOCK\s+(\S+)([^>]*?)-->\s*$", re.M)
 KIND_RE = re.compile(r"kind=(\S+)")
 SUMMARY_RE = re.compile(r"^\s*(?:요약|Summary)\s*:\s*(.*)$", re.I)

@@ -21,7 +21,6 @@ VIEWER_DEFAULTS = {
     "model_interactive": "sonnet",
     "model_vision": "sonnet",
     "max_context_chars": 250000,
-    "highlight_default_categories": ["problem", "contribution", "insight", "method", "result", "limitation"],
     "auto_annotate": False,
 }
 VERIFY_RE = re.compile(r"verify:\s*(PASS|FAIL)")
@@ -106,16 +105,8 @@ class PaperEntry:
 
 
 def highlight_count(work: Path) -> int:
-    """Evidence-derived highlights plus H blocks, once the highlight step has run (highlights.md exists; it may hold
-    no H block when evidence already covers the density cap). Unanchorable quotes are counted too: an estimate."""
-    from functions.annotations import EVIDENCE_TO_HIGHLIGHT, parse_evidence
-    md = work / "highlights.md"
-    if not md.is_file():
-        return 0
-    evidence = parse_evidence((work / "evidence.md").read_text(encoding="utf-8")) if (work / "evidence.md").is_file() else {}
-    derived = sum(e["category"] in EVIDENCE_TO_HIGHLIGHT and not e["not_reported"] and bool(e["page"] and e["quote"])
-                  for e in evidence.values())
-    return derived + _count(md, r"^###\s+H\d+\s*$")
+    """H blocks in highlights.md (the only highlights; evidence quotes are not highlighted)."""
+    return _count(work / "highlights.md", r"^###\s+H\d+\s*$")
 
 
 def entry(folder: Path, root: Path) -> PaperEntry:

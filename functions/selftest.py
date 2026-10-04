@@ -256,10 +256,11 @@ def check_papers(root: Path, paper: Path, failures: list) -> None:
 
 
 EXPECTED_ANNOTATION_ERRORS = [
-    "missing translation for p2-b5", "unknown block p9-b9", "H3: quote not found", "H4: category 'novelty'",
+    "missing translation for p2-b5", "unknown block p9-b9", "H98: quote not found", "H99: category 'novelty'",
     "figure 'fig-p9-0' is not in", "unknown evidence E9", "[FIG: fig-nope] refers to an unknown figure",
 ]
 EXPECTED_ANNOTATION_WARNINGS = ["p2-b6 drops numbers ['61.4']"]
+# highlights come only from H blocks: 9 in the fixture, covering every core category (no coverage warning)
 
 
 def check_annotations(root: Path, failures: list) -> None:
@@ -267,8 +268,10 @@ def check_annotations(root: Path, failures: list) -> None:
     r = verify_annotations(paper)
     if r["errors"]:
         failures.append(f"verify_annotations: good case should pass but got {r['errors']}")
-    if r["translation"] != {"done": 16, "total": 16} or len(r["highlights"]) != 6 or len(r["notes"]) != 3:
+    if r["translation"] != {"done": 16, "total": 16} or len(r["highlights"]) != 9 or len(r["notes"]) != 3:
         failures.append(f"verify_annotations: unexpected counts {r['translation']}, {len(r['highlights'])}, {len(r['notes'])}")
+    if any(h["id"].startswith("E") for h in r["highlights"]) or any(w.startswith("highlights:") for w in r["warnings"]):
+        failures.append(f"verify_annotations: evidence must not be highlighted / unexpected coverage warnings {r['warnings']}")
 
     golden = json.loads(GOLDEN.read_text(encoding="utf-8")) if GOLDEN.is_file() else None
     got = json.loads(build_viewer(paper, root / "annotated").read_text(encoding="utf-8"))
@@ -277,6 +280,13 @@ def check_annotations(root: Path, failures: list) -> None:
         diff = sorted(k for k in set(got) | set(golden or {}) if got.get(k) != (golden or {}).get(k))
         failures.append(f"build_viewer: bundle differs from {GOLDEN.name} in {diff} "
                         "(if the schema changed on purpose: scripts/internal/build_viewer.sh --update-golden)")
+
+    (paper / WORK_DIR / "highlights.md").write_text("### H1\n- category: result\n- page: 2\n"
+                                                   '- quote: "the router feeds the sparse attention block and the output head"\n',
+                                                   encoding="utf-8")
+    w = verify_annotations(paper, ["highlights"])["warnings"]
+    if not any("no problem, prior_work, contribution, method highlight" in x for x in w) or not any("no note_" in x for x in w):
+        failures.append(f"verify_annotations: expected coverage and missing-note warnings, got {w}")
 
     write_annotations(paper, "bad")
     r = verify_annotations(paper)

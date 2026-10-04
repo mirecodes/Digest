@@ -27,8 +27,10 @@ function Outline() {
   );
 }
 
+/** The paper's reading map: one-line summaries (notes) grouped by category, each anchored to its sentence. */
 function Highlights() {
   const highlights = useStore((s) => s.data!.highlights);
+  const noteLang = useStore((s) => s.noteLang);
   const showHl = useStore((s) => s.showHl);
   const hidden = useStore((s) => s.hiddenCats);
   const toggle = useStore((s) => s.toggle);
@@ -41,6 +43,7 @@ function Highlights() {
   if (highlights.length === 0) return <p className="empty">{t("no_highlights")}</p>;
   return (
     <div className="hl-panel">
+      <p className="panel-title">{t("key_points")}</p>
       <label className="check main">
         <input type="checkbox" checked={showHl} onChange={() => toggle("showHl")} data-testid="toggle-hl-side" />
         {t("show_highlights")} <span className="where">H</span>
@@ -58,14 +61,21 @@ function Highlights() {
         <section key={c}>
           <h3><span className={`swatch hl-${c}`} />{t(`cat_${c}` as Key)}</h3>
           <ul className="hl-list">
-            {items.map((h) => (
-              <li key={h.id}>
-                <button data-hl-item={h.id} onClick={() => nav.goToBlock(h.id)}>
-                  <span>{h.quote.length > QUOTE_MAX ? `${h.quote.slice(0, QUOTE_MAX)}…` : h.quote}</span>
-                  <span className="where">p.{h.page}</span>
-                </button>
-              </li>
-            ))}
+            {items.map((h) => {
+              const note = noteLang === "en" ? h.note_en ?? h.note_tr : h.note_tr ?? h.note_en;
+              const quote = h.quote.length > QUOTE_MAX ? `${h.quote.slice(0, QUOTE_MAX)}…` : h.quote;
+              return (
+                <li key={h.id}>
+                  <button data-hl-item={h.id} onClick={() => nav.goToBlock(h.id)}>
+                    <span className="hl-text">
+                      <span className="hl-note">{note ?? quote}</span>
+                      {note && <span className="hl-quote">“{quote}”</span>}
+                    </span>
+                    <span className="where">p.{h.page}</span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </section>
       ))}

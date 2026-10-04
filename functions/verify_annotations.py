@@ -2,7 +2,8 @@
 
   translation   .work/translate/pNNN.<lang>.md against pNNN.src.md (pages without one are just not done yet);
                 <lang> is target_lang from configs/cfg.yaml
-  highlights    evidence-derived highlights + .work/highlights.md H blocks: verbatim on their page and anchorable
+  highlights    .work/highlights.md H blocks (big-picture key sentences): verbatim on their page and anchorable,
+                core categories covered, density; evidence quotes are not highlighted
   figures       .work/figure_notes.md: one F block per figure in layout/figures.json, valid citation markers
 
 A missing highlights.md / figure_notes.md is "not generated yet", not an error. Every check that runs follows the
@@ -20,7 +21,7 @@ from pathlib import Path
 import pymupdf
 
 from functions.anchor import anchor_quote
-from functions.annotations import (EVIDENCE_TO_HIGHLIGHT, HIGHLIGHT_CATEGORIES, parse_evidence, parse_figure_notes,
+from functions.annotations import (CORE_CATEGORIES, HIGHLIGHT_CATEGORIES, parse_evidence, parse_figure_notes,
                                    parse_highlights, parse_src, parse_translation, read)
 from functions.layout import build_layout
 from functions.papers import find_pdf, target_lang, tr_files
@@ -32,7 +33,9 @@ TR_NUMBER_RE = re.compile(r"\d+\.\d+\s*%?|\d+\s*%|\d+(?:\.\d+)?\s*×")   # decim
 REF_NUM_RE = re.compile(r"\[\d+(?:\s*[,–-]\s*\d+)*\]")
 FIG_RE = re.compile(r"\[FIG:\s*([^\]\s]+)\s*\]")
 LENGTH_RATIO = (0.25, 3.0)
-DENSITY = {"min": 15, "max": 40, "per_page_factor": 1.5, "per_page_max": 4}
+# A reading map, not a marker pen: 8-24 key sentences (at most 3 per page for short papers), up to 6 on one page
+# (intro pages hold problem, prior work, assumption and contribution together).
+DENSITY = {"min": 8, "max": 24, "per_page_factor": 3, "per_page_max": 6}
 SUMMARY_MAX = 120   # characters of the target-language popover headline
 
 
@@ -76,22 +79,9 @@ def _anchor(doc, page: int, quote: str):
     return anchor_quote(doc[page - 1], quote) if 1 <= page <= len(doc) else None
 
 
-def check_highlights(work: Path, doc, pages: dict, evidence: dict, lang: str, errors: list, warnings: list) -> list[dict]:
-    """Anchored highlights for the bundle: evidence-derived first, then H blocks."""
+def check_highlights(work: Path, doc, pages: dict, lang: str, errors: list, warnings: list) -> list[dict]:
+    """Anchored H blocks for the bundle, in file order."""
     items = []
-    for eid, e in evidence.items():
-        cat = EVIDENCE_TO_HIGHLIGHT.get(e["category"])
-        if not cat or e["not_reported"] or not e["page"] or not e["quote"]:
-            continue
-        a = _anchor(doc, e["page"], e["quote"])
-        if not a:
-            warnings.append(f"{eid}: evidence quote could not be anchored on p.{e['page']}; left out of the viewer")
-            continue
-        if a["ambiguous"]:
-            warnings.append(f"{eid}: quote occurs more than once on p.{e['page']}; the first match is highlighted")
-        items.append({"id": eid, "source": "evidence", "category": cat, "page": e["page"], "rects": a["rects"],
-                      "quote": e["quote"], "note_tr": e["note"], "note_en": None})
-
     md = read(work / "highlights.md")
     if md is None:
         return items
@@ -114,14 +104,15 @@ def check_highlights(work: Path, doc, pages: dict, evidence: dict, lang: str, er
             continue
         if a["ambiguous"]:
             warnings.append(f"{hid}: quote occurs more than once on p.{h['page']}; the first match is highlighted")
-        q = loose(h["quote"])
-        for item in items:
-            other = loose(item["quote"])
-            if item["source"] == "evidence" and item["page"] == h["page"] and (q in other or other in q):
-                warnings.append(f"{hid}: duplicates evidence {item['id']} (evidence quotes are highlighted automatically)")
-        items.append({"id": hid, "source": "highlight", "category": h["category"], "page": h["page"], "rects": a["rects"],
+        if not h["note_tr"]:
+            warnings.append(f"{hid}: no note_{lang} (the one-line summary is what the reader sees first)")
+        items.append({"id": hid, "category": h["category"], "page": h["page"], "rects": a["rects"],
                       "quote": h["quote"], "note_tr": h["note_tr"], "note_en": h["note_en"]})
 
+    covered = {item["category"] for item in items}
+    missing = [c for c in CORE_CATEGORIES if c not in covered]
+    if missing:
+        warnings.append(f"highlights: no {', '.join(missing)} highlight (core of the reading map)")
     n_pages = len(doc)
     limit = int(min(DENSITY["max"], DENSITY["per_page_factor"] * n_pages))
     low = min(DENSITY["min"], limit)  # short papers: the per-page cap wins
@@ -211,7 +202,7 @@ def verify_annotations(paper_dir: Path, parts=PARTS) -> dict:
         result["translation"] = check_translation(work, lang, errors, warnings)
     if "highlights" in parts:
         doc = pymupdf.open(find_pdf(paper_dir))
-        result["highlights"] = check_highlights(work, doc, load_pages(work / "pages.md"), evidence, lang, errors, warnings)
+        result["highlights"] = check_highlights(work, doc, load_pages(work / "pages.md"), lang, errors, warnings)
     if "figures" in parts:
         result["notes"] = check_figure_notes(work, figures, evidence, lang, errors, warnings)
     result["present"] = bool(tr_files(work, lang)) or (work / "highlights.md").is_file() \

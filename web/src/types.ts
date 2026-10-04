@@ -1,7 +1,9 @@
 // Mirror of viewer.json (docs/viewer-plan.md §4.8). Keep in sync with functions/build_viewer.py.
 
 export type Rect = [number, number, number, number];
-export type Category = "problem" | "contribution" | "insight" | "method" | "result" | "limitation";
+// big-picture highlight categories, in reading order (functions/annotations.py HIGHLIGHT_CATEGORIES)
+export type Category =
+  | "problem" | "assumption" | "prior_work" | "contribution" | "method" | "result" | "insight" | "limitation";
 export type Column = -1 | 0 | 1;
 
 export interface PageInfo {
@@ -50,7 +52,6 @@ export interface Figure {
 
 export interface Highlight {
   id: string;
-  source: "evidence" | "highlight";
   category: Category;
   page: number;
   rects: Rect[];
@@ -67,7 +68,7 @@ export interface OutlineItem {
 }
 
 export interface ViewerData {
-  version: 2;
+  version: 3;
   built_at: string;
   lang: string; // target_lang of translations and notes (configs/cfg.yaml)
   paper: {

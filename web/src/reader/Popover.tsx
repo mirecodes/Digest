@@ -105,7 +105,7 @@ function HighlightTip({ h }: { h: Highlight }) {
       <header>
         <span className={`swatch hl-${h.category}`} />
         <strong>{t(`cat_${h.category}` as Key)}</strong>
-        <span className="where">{h.source === "evidence" ? t("source_evidence") : t("source_highlight")} {h.id}</span>
+        <span className="where">p.{h.page}</span>
       </header>
       {note && <p>{note}</p>}
     </>

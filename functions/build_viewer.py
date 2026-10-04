@@ -23,7 +23,8 @@ from functions.prepare import ROOT, load_config, out_root
 from functions.verify import WORK_DIR, output_path
 from functions.verify_annotations import verify_annotations
 
-VERSION = 2   # bump on schema changes: ensure_viewer rebuilds bundles of another version (2: tr/note_tr keys, lang)
+VERSION = 3   # bump on schema changes: ensure_viewer rebuilds bundles of another version
+              # (2: tr/note_tr keys, lang; 3: highlights are H blocks only, big-picture categories, no `source`)
 CITE_RE = re.compile(r"\s*\[[^\]]*\]")
 GOLDEN = ROOT / "tests" / "fixtures" / "viewer.sample.json"
 

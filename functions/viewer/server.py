@@ -99,7 +99,7 @@ def papers():
 @app.get("/api/config")
 def config():
     cfg = viewer_cfg()
-    return {k: cfg[k] for k in ("target_lang", "llm_backend", "highlight_default_categories")}
+    return {k: cfg[k] for k in ("target_lang", "llm_backend")}
 
 
 @app.get("/api/papers/{pid}/viewer.json")

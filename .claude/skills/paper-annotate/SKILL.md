@@ -35,7 +35,8 @@ Run `scripts/internal/layout.sh "NAME"` with the `-n` value. It prints `[layout]
 from now on — then `[layout] target_lang: <lang>` and `[layout] pages=… blocks=… figures=… low_conf=…`. If it
 reports that the name matches 0 or several folders (or is not prepared yet), stop and report.
 Without `--only`, run `scripts/internal/verify_annotations.sh "<paper>"` and skip parts that are already complete:
-translation `N/N`, highlights.md exists, figure notes `N/N`. If all three are complete, go to step 9.
+translation `N/N`, highlights with at least 8 H blocks (an older highlights.md without H blocks is not complete),
+figure notes `N/N`. If all three are complete, go to step 9.
 
 ### 2. Read context
 `<name> - summary.md`, the Glossary section of `<name> - report.md`, `<work>/evidence.md`,
@@ -63,14 +64,35 @@ one translation under each marker (template: `templates/translation.md`). Rules:
 ids). Review each WARN: dropped numbers or citation numbers, untranslated paragraphs, and length ratios outside
 0.25–3.0 usually mean a sentence was dropped or summarized. The summary line must read `translation N/N`.
 
-### 6. Highlights → `<work>/highlights.md`
-Template: `templates/highlights.md`. Evidence quotes of categories problem / gap / contribution / insight /
-method / result / ablation / limitation are highlighted automatically — do **not** repeat them. Add H blocks
-only for key sentences the evidence does not cover. Notes go in `note_<lang>` (target language) and `note_en`.
-Density for the total (evidence-derived + H):
-- 15–40 and at most 1.5 × pages (short papers: at most 1.5 × pages); at most 4 on one page;
-- each quote one sentence (two at most), 40–300 characters, copied **verbatim** from pages.md (original language);
-- coverage: ≥1 problem, ≥1 contribution, ≥2 method, ≥2 result, ≥1 limitation if the paper states any.
+### 6. Highlights → `<work>/highlights.md` (the paper's reading map)
+Template: `templates/highlights.md`. Highlights are **not** the evidence: evidence.md is a detailed internal record
+for the report and is never highlighted. Highlights are a short, curated map that lets a reader grasp the whole
+paper at a glance — the sentences you would mark for a colleague who has ten minutes. Work in two passes:
+1. **Outline first** (from the summary, the report and your reading): in one line each, what is the problem, what
+   does the paper assume, what did prior work do and where does it fall short, what is contributed, what is the core
+   method, what are the main results, and what is the key insight or limitation.
+2. **Anchor each line** to the one sentence in the paper that states it best, and write the line as the note.
+
+Categories, in reading order (use each where the paper has it; the first five are expected in every paper):
+| category | what it captures |
+|---|---|
+| `problem` | the problem the paper wants to solve, and why it matters |
+| `prior_work` | what existing methods do and their specific shortcoming this paper targets |
+| `contribution` | what the paper claims to contribute (one H block per distinct contribution) |
+| `method` | the core idea of the approach: the mechanism a reader must understand, not implementation detail |
+| `result` | the main experimental findings: headline numbers versus baselines, decisive ablations |
+| `assumption` | key assumptions or problem settings the method relies on (stated or clearly implied by a sentence) |
+| `insight` | the "why it works" or a takeaway that frames the paper (free choice: anything that helps the big picture) |
+| `limitation` | limitations or open problems the authors state |
+
+Rules:
+- 8–24 H blocks in total (short papers: at most 3 × pages); at most 6 on one page. Prefer fewer, sharper ones.
+- `quote`: one sentence (two at most), 40–300 characters, copied **verbatim** from pages.md (original language).
+  Prefer the sentence that states the point in general terms over one buried in detail.
+- `note_<lang>` (target language) and `note_en`: the one-line summary the reader sees first. Start with the
+  role, then the content in your own words, e.g. `풀려는 문제: …`, `기존 방법의 한계: …`, `핵심 방법: …`,
+  `주요 결과: …`. Numbers in a note must appear in the quoted sentence or in evidence.md (never from memory).
+- Do not highlight related-work sentences about other papers' details, implementation trivia, or captions.
 
 ### 7. Figure notes → `<work>/figure_notes.md`
 Template: `templates/figure_notes.md`. One F block for **every** figure and table in `layout/figures.json`.

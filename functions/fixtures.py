@@ -277,19 +277,68 @@ TRANSLATION = {
     },
 }
 
-HIGHLIGHTS = """### H1
+HIGHLIGHTS = f"""### H1
+- category: problem
+- page: 1
+- quote: "{PROBLEM_QUOTE}"
+- note_ko: 풀려는 문제: 기존 방법은 입력 길이에 대해 이차 복잡도라 긴 문맥을 다루기 어렵다
+- note_en: Problem: existing methods are quadratic in length, which limits long contexts
+
+### H2
+- category: prior_work
+- page: 1
+- quote: "Dense attention compares every token with every other token"
+- note_ko: 기존 방법의 한계: dense attention은 모든 토큰 쌍을 비교한다
+- note_en: Prior work: dense attention compares every pair of tokens
+
+### H3
+- category: contribution
+- page: 1
+- quote: "{CONTRIBUTION_QUOTE}"
+- note_ko: 기여: 긴 입력을 위한 sparse attention 모델 FooNet
+- note_en: Contribution: FooNet, a sparse attention model for long inputs
+
+### H4
+- category: assumption
+- page: 1
+- quote: "We keep the useful part of attention and drop the rest"
+- note_ko: 핵심 가정: attention의 일부만 유용하고 나머지는 버려도 된다
+- note_en: Key assumption: only part of attention is useful
+
+### H5
+- category: method
+- page: 1
+- quote: "{HYPHEN_QUOTE}"
+- note_ko: 핵심 방법: 강화학습으로 학습한 router가 소수의 key를 고른다
+- note_en: Core method: an RL-trained router selects a few keys
+
+### H6
 - category: method
 - page: 2
 - quote: "the router feeds the sparse attention block and the output head"
-- note_ko: 라우터가 어텐션과 출력 헤드를 연결하는 구조
-- note_en: The router connects attention and the output head
+- note_ko: 구조: router → sparse attention → output head
+- note_en: Architecture: router, then sparse attention, then the output head
 
-### H2
+### H7
+- category: result
+- page: 2
+- quote: "{RESULT_QUOTE}"
+- note_ko: 주요 결과: LRA 평균 61.4로 Transformer(54.4)보다 높다
+- note_en: Main result: 61.4 on LRA vs 54.4 for the Transformer
+
+### H8
 - category: result
 - page: 3
 - quote: "removing the router lowers the accuracy of the model by a clear margin"
-- note_ko: 라우터 제거 시 정확도 하락 (ablation)
-- note_en: Removing the router lowers accuracy (ablation)
+- note_ko: ablation: router를 빼면 정확도가 떨어진다
+- note_en: Ablation: removing the router lowers accuracy
+
+### H9
+- category: insight
+- page: 3
+- quote: "This confirms that the learned sparsity pattern is what matters most for the final accuracy of the model."
+- note_ko: 핵심 통찰: 정확도를 좌우하는 것은 학습된 sparsity 패턴이다
+- note_en: Insight: the learned sparsity pattern drives accuracy
 """
 
 FIGURE_NOTES = """### F1
@@ -342,8 +391,8 @@ def write_annotations(paper: Path, variant: str = "good") -> None:
         del pages[2]["p2-b5"]
         pages[2]["p9-b9"] = "없는 블록"
         pages[2]["p2-b6"] = pages[2]["p2-b6"].replace("61.4", "육십일 점 사")
-        highlights += ('\n### H3\n- category: result\n- page: 1\n- quote: "FooNet is the best model ever built by anyone"\n'
-                       '\n### H4\n- category: novelty\n- page: 1\n- quote: "We propose FooNet"\n')
+        highlights += ('\n### H98\n- category: result\n- page: 1\n- quote: "FooNet is the best model ever built by anyone"\n'
+                       '\n### H99\n- category: novelty\n- page: 1\n- quote: "We propose FooNet"\n')
         notes = notes.replace("[E2, p.2]", "[E9, p.2]").replace("[FIG: fig-p3-0]", "[FIG: fig-nope]")
         notes += "\n### F4\n- figure: fig-p9-0\n- status: SKIP\n- reason: does not exist\n"
     # The fixture text is Korean; files and section names follow target_lang so the checks run under any config.

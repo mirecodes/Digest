@@ -97,7 +97,7 @@ describe("citations", () => {
 
 describe("highlights", () => {
   const h = (id: string, category: Highlight["category"], rects: Rect[], page = 1) =>
-    ({ id, source: "evidence", category, page, rects, quote: "", note_tr: null, note_en: null }) as Highlight;
+    ({ id, category, page, rects, quote: "", note_tr: null, note_en: null }) as Highlight;
   const blocks = [
     { id: "col", page: 1, kind: "paragraph", bbox: [50, 100, 300, 400] },
     { id: "para", page: 1, kind: "paragraph", bbox: [50, 100, 300, 200] },

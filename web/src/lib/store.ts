@@ -83,7 +83,8 @@ export const useStore = create<State>((set, get) => ({
   link: null,
   flash: null,
   pop: null,
-  setData: (data) => set({ data, page: 1, link: null, flash: null, pop: null }),
+  // a paper with highlights opens on its reading map
+  setData: (data) => set({ data, page: 1, link: null, flash: null, pop: null, tab: data?.highlights.length ? "highlights" : "outline" }),
   setZoom: (zoom) => set({ zoom }),
   setScale: (scale) => get().scale !== scale && set({ scale }),
   toggle: (key) => {

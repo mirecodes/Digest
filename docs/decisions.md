@@ -236,5 +236,17 @@
 ### D4-5. viewer.json 스키마 버전
 - 실제 논문에서 해설이 영어로만 나왔다. D3.5-5의 키 변경(`ko`→`tr`) 이전에 만든 viewer.json이 입력 파일 mtime 기준으로는 최신이라 재빌드되지 않았기 때문이다. → `VERSION = 2`, `ensure_viewer`가 저장된 버전이 다르면 재빌드 (키가 정렬돼 `"version"`이 파일 끝에 있으므로 끝 64바이트만 읽는다). 앞으로 스키마를 바꾸면 VERSION을 올린다.
 
+### D4-7. 하이라이트 = 큰 틀의 읽기 지도 (evidence는 하이라이트하지 않음) — 사용자 요청
+- 문제: evidence.md의 세부 인용이 전부 하이라이트되어(실제 논문 45개) 핵심이 묻혔다. 사용자 요청: evidence는 내부와 보고서에만 쓰고, 하이라이트는 논문 전체 구조를 잡는 핵심만 요약적으로.
+- 변경:
+  - 하이라이트 = `/paper-annotate`가 고른 H 블록만. evidence 자동 하이라이트와 "evidence와 중복" 경고 삭제. viewer.json의 `evidence`는 피규어 해설 인용 칩용으로 그대로 둔다.
+  - 카테고리(읽는 순서): `problem`(풀려는 문제) · `assumption`(핵심 가정) · `prior_work`(기존 방법과 한계) · `contribution` · `method`(핵심 방법) · `result`(주요 결과) · `insight`(핵심 통찰 — 큰 틀에 도움이 되는 것 자유롭게) · `limitation`. 사용자가 든 예시 여섯에 자유 항목 둘을 더했다. 색과 사이드바 필터에 쓰이므로 자유 텍스트 카테고리는 두지 않았다.
+  - 하이라이트 원문은 계속 verbatim(앵커링·검증 가능해야 하므로). "요약적으로"는 메모가 맡는다: `note_<lang>`이 "역할: 한 줄 요약" 형식이고, 사이드바는 메모를 앞에, 인용을 작게 보여 준다 → 사이드바 하이라이트 탭이 "이 논문의 핵심" 요약표가 된다. 하이라이트가 있는 논문은 이 탭으로 열린다.
+  - skill 6단계: 먼저 한 줄씩 개요를 쓰고, 각 줄을 가장 잘 말하는 원문 한 문장에 고정하는 두 단계. 밀도 8–24(짧은 논문 3×페이지), 페이지당 6 (서론 페이지에 문제·기존 방법·가정·기여가 모이므로 4에서 올림).
+  - 검증: 핵심 5개(problem, prior_work, contribution, method, result) 누락 시 WARN, 메모 없으면 WARN. `assumption`은 논문에 따라 없을 수 있어 필수에서 뺐다.
+  - 스키마 VERSION 3 (`source` 필드 삭제). 쓰이지 않던 `viewer.highlight_default_categories` 설정 삭제.
+- D4-2의 밀도 문제는 이것으로 해소된다 (3번안보다 근본적인 해결).
+- 기존 주석 논문의 highlights.md(H 블록 0개)는 하이라이트가 비게 된다. `Process ▸ Highlights`로 다시 만들어야 하며, Run all의 "완료" 판정도 H 블록 수 기준으로 바꿨다.
+
 ### D4-6. 남은 Phase 4 항목
 - 피규어 bbox 수정(`PUT …/bbox`, figure_overrides.json)은 아직 구현하지 않았다. 요청 범위(보기)에 없었고, 실측 low_conf 0이라 급하지 않다.

@@ -57,19 +57,23 @@ test("5: H toggles the highlight layer; the sidebar filters and navigates", asyn
   await page.locator("body").press("h");
   await expect(hls.first()).toBeVisible();
 
-  await page.getByRole("tab", { name: "Highlights" }).click();
+  // a paper with highlights opens on its reading map: one-line summaries first, the quoted sentence below
+  await expect(page.getByRole("tab", { name: "Highlights" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator('[data-hl-item="H1"] .hl-note')).toContainText("풀려는 문제");
+  await expect(page.locator(".hl-panel h3")).toHaveText(
+    ["Problem", "Key assumption", "Prior work & its gaps", "Contribution", "Core method", "Main result", "Key insight"]);
   await page.locator(".cats label", { hasText: "Problem" }).locator("input").uncheck();
-  await expect(page.locator('.hl[data-hl-id="E1"]')).toHaveCount(0);
-  await expect(page.locator('.hl[data-hl-id="E3"]').first()).toBeVisible();
+  await expect(page.locator('.hl[data-hl-id="H1"]')).toHaveCount(0);
+  await expect(page.locator('.hl[data-hl-id="H3"]').first()).toBeVisible();
 
-  await page.locator('[data-hl-item="H2"]').click(); // page 3
+  await page.locator('[data-hl-item="H8"]').click(); // page 3
   await expect(page.locator('.pdf-page[data-page="3"] .flash')).toBeAttached();
   await expect(page.getByTestId("page-indicator")).toHaveText("3 / 3");
 });
 
 test("hovering a highlight shows its category and note", async ({ page }) => {
   await openDemo(page);
-  const c = await ptToClient(page, 1, 180, 173); // inside E1's first rect [101.02, 167.32, 264.57, 179.69]
+  const c = await ptToClient(page, 1, 180, 173); // inside H1's first rect [101.02, 167.32, 264.57, 179.69]
   await page.mouse.move(c.x, c.y);
   const tip = page.getByTestId("highlight-tip");
   await expect(tip).toBeVisible({ timeout: 1500 });
@@ -91,11 +95,11 @@ test("highlight rects sit on the text-layer words within 2 pt", async ({ page })
     const b = r.getBoundingClientRect();
     return { left: b.left, mid: (b.top + b.bottom) / 2 };
   });
-  const hl = (await page.locator('.hl[data-hl-id="E1"]').first().boundingBox())!;
+  const hl = (await page.locator('.hl[data-hl-id="H1"]').first().boundingBox())!;
   const { s } = await ptToClient(page, 1, 0, 0);
   const dx = Math.abs(hl.x - word.left) / s;
   const dy = Math.abs(hl.y + hl.height / 2 - word.mid) / s;
-  console.log(`[overlay] E1 start vs text layer: dx=${dx.toFixed(2)}pt dy=${dy.toFixed(2)}pt`);
+  console.log(`[overlay] H1 start vs text layer: dx=${dx.toFixed(2)}pt dy=${dy.toFixed(2)}pt`);
   expect(dx).toBeLessThan(2);
   expect(dy).toBeLessThan(2);
 });

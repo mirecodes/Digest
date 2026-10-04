@@ -28,10 +28,12 @@
 
   /* highlight categories (r, g, b): faint fill over the page, solid bar in the translation pane */
   --hl-problem: 175, 82, 222;
+  --hl-assumption: 0, 184, 212;
+  --hl-prior_work: 139, 149, 161;
   --hl-contribution: 255, 196, 0;
-  --hl-insight: 255, 149, 0;
   --hl-method: 49, 130, 246;
   --hl-result: 0, 200, 150;
+  --hl-insight: 255, 149, 0;
   --hl-limitation: 240, 68, 82;
   --hl-alpha: 0.24;
 
@@ -173,6 +175,10 @@ input:focus { outline: 2px solid var(--accent); outline-offset: 0; background: v
 }
 .sidebar .tab:hover { background: none; color: var(--text-secondary); }
 .hl-panel { padding: 12px 8px; }
+.panel-title { font-size: 15px; font-weight: 600; color: var(--text); margin: 4px 8px 8px; }
+.hl-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.hl-note { color: var(--text); }
+.hl-quote { color: var(--text-dim); font-size: 12px; font-style: italic; }
 .check { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 14px; color: var(--text-secondary); cursor: pointer; }
 .check .where { margin-left: auto; }
 .check.main { font-weight: 600; color: var(--text); }
@@ -225,6 +231,8 @@ input:focus { outline: 2px solid var(--accent); outline-offset: 0; background: v
 
 /* ---- highlights and figure badges (overlay: pointer-events none except the badges) */
 .hl-problem { --c: var(--hl-problem); }
+.hl-assumption { --c: var(--hl-assumption); }
+.hl-prior_work { --c: var(--hl-prior_work); }
 .hl-contribution { --c: var(--hl-contribution); }
 .hl-insight { --c: var(--hl-insight); }
 .hl-method { --c: var(--hl-method); }

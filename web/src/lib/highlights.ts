@@ -2,7 +2,9 @@
 // translation pane, §8.6 — block level, not sentence level).
 import type { Block, Category, Highlight, Rect } from "../types";
 
-export const CATEGORIES: Category[] = ["problem", "contribution", "insight", "method", "result", "limitation"];
+export const CATEGORIES: Category[] = [
+  "problem", "assumption", "prior_work", "contribution", "method", "result", "insight", "limitation",
+];
 
 export const visible = (hls: Highlight[], show: boolean, hidden: Category[]) =>
   show ? hls.filter((h) => !hidden.includes(h.category)) : [];
