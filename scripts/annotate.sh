@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Prepare digested papers for the viewer with headless Claude Code (/paper-annotate), one session per paper:
+# Prepare digested papers for the viewer with a headless coding agent running /paper-annotate (agent.backend in
+# configs/cfg.yaml: claude | codex | gemini; scripts/internal/agent.sh), one session per paper:
 # translation per block (target_lang in configs/cfg.yaml), highlights, figure notes, then verify_annotations and
 # build_viewer.
 # Usage: scripts/annotate.sh [-n NAME] [--only PARTS]
@@ -31,17 +32,13 @@ if [ -z "$LIST" ]; then
   echo "[annotate] nothing to annotate"
   exit 0
 fi
-OUT="$("$PY" -c 'from functions.build_viewer import viewer_root; print(viewer_root())')"
+"$ROOT/scripts/internal/agent.sh" --check     # fail once, with install/login help, if the agent CLI is missing
 
 FAILED=0
 while IFS= read -r FOLDER; do
   echo "[annotate] === $FOLDER${ONLY:+ (only $ONLY)}"
-  # stdin from /dev/null so claude does not consume the folder list; Read is needed to look at figure crops.
-  claude -p "/paper-annotate -n \"$FOLDER\"${ONLY:+ --only $ONLY}" \
-    --add-dir "$OUT" \
-    --permission-mode acceptEdits \
-    --allowedTools "Bash(scripts/internal/*)" "Read" \
-    < /dev/null || { echo "[annotate] FAILED: $FOLDER" >&2; FAILED=$((FAILED + 1)); }
+  "$ROOT/scripts/internal/agent.sh" paper-annotate "-n \"$FOLDER\"${ONLY:+ --only $ONLY}" \
+    || { echo "[annotate] FAILED: $FOLDER" >&2; FAILED=$((FAILED + 1)); }
 done <<< "$LIST"
 
 echo "[annotate] done, $FAILED failed"

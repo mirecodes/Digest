@@ -5,10 +5,11 @@ For any paper request, follow the `/paper-digest` skill exactly.
 
 ## Layout
 ```
-configs/cfg.yaml   out_dir (empty = out/), target_lang (viewer translations), title_words, max_papers (per run without -n)
+configs/cfg.yaml   out_dir (empty = out/), target_lang (viewer translations), agent (claude | codex | gemini), title_words, max_papers
 functions/         prepare, registry, paper_name, extract_pdf, verify, selftest
 scripts/           user entry points: setup.sh, digest.sh [-n NAME], annotate.sh [-n NAME] [--only PARTS], viewer.sh
-scripts/internal/  prepare, verify, selftest (.sh; _env.sh is a sourced helper)
+scripts/internal/  agent (runs a skill with the configured AI CLI), prepare, verify, registry, selftest (.sh; _env.sh is sourced)
+README.md          user guide (setup, choosing Claude / ChatGPT / Gemini)
 src/               input folder, never modified; a PDF is copied out when prepared (subfolders are mirrored)
 web/               viewer frontend (React + Vite + pdf.js); docs/ viewer plan and decision log
 <out_dir>/.paper-registry.yaml   every paper by PDF hash: src/ paths, output folder, state (rebuilt from disk)

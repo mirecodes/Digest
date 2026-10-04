@@ -193,3 +193,19 @@
 - viewer.json은 언어 중립 키로 바꿨다: `figures[].note.tr`, `highlights[].note_tr`, 최상위 `lang`. golden 갱신.
 - 미번역 경고는 한글 검출 대신 "원문과 같음"으로 바꿔 모든 언어에서 동작한다. 해설 요약 줄 라벨은 `요약:`(한국어) 또는 `Summary:`.
 - digest 보고서(한국어 → 영어)는 범위 밖으로 남겼다. verify.py의 ko/en 구간 검사와 paper-digest skill을 함께 바꿔야 하는 별도 작업이다.
+
+### D3.5-6. AI 백엔드: Claude / ChatGPT / Gemini (배포용)
+- 문제: 파이프라인이 `claude -p`(개발자 본인의 Claude Code 로그인)에 묶여 있었다. 다른 사용자는 자기 계정·키로 원하는 AI를 써야 한다.
+- 선택: **각 회사의 에이전트 CLI를 그대로 쓴다** — Claude Code(`claude -p`), Codex CLI(`codex exec`, ChatGPT/OpenAI), Gemini CLI(`gemini -p`). 공용 진입점 `scripts/internal/agent.sh SKILL 'ARGS'`가 `configs/cfg.yaml`의 `agent.backend`/`agent.model`(또는 `$PAPER_AGENT`)에 따라 명령을 만든다. `digest.sh`·`annotate.sh`·리더의 job이 모두 이 스크립트를 거친다.
+  - 대안이었던 API 직접 호출(Anthropic/OpenAI/Gemini SDK)은 파일 읽기·셸 실행·검증 루프를 갖춘 에이전트를 직접 만들어야 한다. CLI들은 이미 로그인(구독 또는 API 키), 파일 도구, 이미지 읽기, 권한 제어를 갖고 있다. 키는 각 CLI가 관리하므로 이 프로젝트는 키를 저장·전달하지 않는다.
+  - skill은 평문 markdown이라 그대로 공유한다. Claude는 `/skill`로, Codex·Gemini는 "`.claude/skills/<skill>/SKILL.md`를 읽고 따르라, 규칙은 CLAUDE.md"라는 프롬프트로 실행한다. AGENTS.md/GEMINI.md 사본은 만들지 않았다 (규칙이 두 군데로 갈라짐).
+  - 품질 보증은 모델이 아니라 스크립트(verify.sh, verify_annotations.sh)가 한다. 다른 모델은 수정 라운드가 늘 수 있지만 검증 안 된 인용은 통과하지 못한다.
+- 권한 (설치된 버전의 `--help`와 공식 문서로 확인: Codex CLI 0.160.0, Gemini CLI 0.62.0):
+  - claude: `--permission-mode acceptEdits --allowedTools "Bash(scripts/internal/*)" "Read" --add-dir <out_dir>` (기존과 같음; digest에도 Read 명시).
+  - codex: `exec --sandbox workspace-write -c approval_policy=never -c sandbox_workspace_write.network_access=true --add-dir <out_dir> --skip-git-repo-check`. 셸 명령 자체는 제한되지 않지만 쓰기는 프로젝트와 out_dir로 제한. 네트워크는 prepare의 arXiv/Crossref 조회에 필요.
+  - gemini: `-p … --approval-mode auto_edit --policy configs/gemini-policy.toml --include-directories <out_dir> --skip-trust`. 정책 파일이 `run_shell_command`를 `scripts/internal/` 접두어로만 허용한다. headless에서 `ask_user`는 deny로 처리되므로 나머지 셸 명령은 실행되지 않는다. (`--allowed-tools`는 deprecated라 정책 엔진을 썼다.)
+- `agent.sh --check`: 백엔드·모델·CLI 버전·로그인 방법 출력, CLI가 없으면 설치 명령과 함께 exit 127. `digest.sh`/`annotate.sh`는 루프 전에 한 번 호출해 논문마다 같은 실패가 반복되지 않게 한다. `--dry-run`은 실행 없이 명령을 출력하며, selftest가 세 백엔드의 핵심 플래그를 이것으로 확인한다 (실제 AI 호출 없음).
+- Codex·Gemini로 실제 논문을 돌려 보지는 않았다 (이 개발 환경에 설치·로그인 없음). 첫 실행에서 skill 해석이나 권한 문제를 확인해야 한다.
+- 뷰어 계획의 `viewer.llm_backend`(Phase 5 대화형 기능용)는 아직 쓰이지 않는다. Phase 5에서는 같은 `agent.backend`를 쓰는 방향으로 정리한다.
+- `configs/cfg.yaml`은 개인 `out_dir` 때문에 skip-worktree 상태다. 저장소에는 `out_dir`만 비운 같은 내용(새 키 포함)을 index에 직접 넣어 커밋했고, 로컬 파일은 그대로 둔다.
+- 배포 문서: `README.md`(영어, 처음 쓰는 사용자 대상)를 새로 만들고, 내용이 낡은 `SETUP_GUIDE.md`(PDF 이동 등)는 README로 흡수해 삭제했다.

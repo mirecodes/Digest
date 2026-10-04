@@ -1,0 +1,8 @@
+# Gemini CLI policy for scripts/internal/agent.sh (backend: gemini).
+# Headless mode treats "ask_user" as deny, so only what is allowed here (plus edits, via --approval-mode auto_edit)
+# can run: the project's own scripts, which use the project .venv. Format: geminicli.com/docs/reference/policy-engine
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "scripts/internal/"
+decision = "allow"
+priority = 100

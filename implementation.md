@@ -454,4 +454,5 @@ scripts/internal/viewer_test.sh [--e2e]
 - UI는 영어만. 번역 언어는 `configs/cfg.yaml`의 `target_lang` (기본 `ko`). viewer.json의 언어 의존 키는 `tr`/`note_tr` + 최상위 `lang`.
 - "Method Not Allowed" 원인: Phase 3 이전에 띄운 서버(`--reload` 없음)가 계속 떠 있어 POST 라우트가 없었다. 서버를 재시작하면 해결. 이제 클라이언트가 405를 "서버가 오래됨, 재시작" 메시지로 보여준다.
 - 테스트: selftest(+ 레지스트리·prepare 복사/이어하기/중복, run API) / vitest 16 / Playwright 8.
+- AI 백엔드 선택 (D3.5-6): `configs/cfg.yaml`의 `agent.backend: claude | codex | gemini`, `agent.model` (빈 값 = CLI 기본). 모든 AI 실행은 `scripts/internal/agent.sh`를 거친다 (`--check` 로그인 확인, `--dry-run` 명령 확인). 한 번만 바꿔 쓰기: `PAPER_AGENT=gemini scripts/digest.sh`. 사용자 가이드는 `README.md`.
 

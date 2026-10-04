@@ -117,6 +117,29 @@ def check_naming(failures: list) -> None:
             failures.append(f"naming: expected {want!r}, got {got!r}")
 
 
+AGENT_EXPECT = {   # backend -> fragments its command line must contain (scripts/internal/agent.sh --dry-run)
+    "claude": ["claude -p /paper-digest", "--allowedTools Bash\\(scripts/internal/\\*\\)", "--add-dir"],
+    "codex": ["codex exec", "--sandbox workspace-write", "approval_policy=never", "network_access=true", "--add-dir",
+              "SKILL.md"],
+    "gemini": ["gemini -p", "--approval-mode auto_edit", "--policy configs/gemini-policy.toml", "--include-directories",
+               "SKILL.md"],
+}
+
+
+def check_agent(failures: list) -> None:
+    import subprocess
+    script = Path(__file__).resolve().parent.parent / "scripts" / "internal" / "agent.sh"
+    for backend, fragments in AGENT_EXPECT.items():
+        r = subprocess.run([str(script), "--dry-run", "paper-digest", '-n "x.pdf"'], capture_output=True, text=True,
+                           env={**os.environ, "PAPER_AGENT": backend})
+        missing = [f for f in fragments if f not in r.stdout]
+        if r.returncode != 0 or missing:
+            failures.append(f"agent {backend}: rc={r.returncode}, missing {missing} in {r.stdout[:200]!r} {r.stderr[:200]!r}")
+    r = subprocess.run([str(script), "--check"], capture_output=True, text=True, env={**os.environ, "PAPER_AGENT": "gpt"})
+    if r.returncode != 2:
+        failures.append(f"agent: unknown backend should exit 2, got {r.returncode}")
+
+
 def check_selection(failures: list) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp)
@@ -373,6 +396,7 @@ def main() -> int:
     failures = []
     check_naming(failures)
     check_selection(failures)
+    check_agent(failures)
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp).resolve()   # macOS: /var -> /private/var; the registry and server report resolved paths
         paper, truth = build_paper(tmp)

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Digest papers from src/ with headless Claude Code, one session per paper.
+# Digest papers from src/ with a headless coding agent (agent.backend in configs/cfg.yaml: claude | codex | gemini),
+# one session per paper (scripts/internal/agent.sh).
 # Usage: scripts/digest.sh [-n NAME]
 #   -n NAME: one paper (src/ relative path, file name or stem, or a PDF path)
 #   without -n: every src/ PDF without an output folder yet, at most max_papers (configs/cfg.yaml) per run.
@@ -20,18 +21,13 @@ RC=0
 LIST="$("$PY" -m functions.prepare --list ${NAME:+-n "$NAME"})" || RC=$?
 [ "$RC" -eq 4 ] && exit 0     # already digested (prepare printed why)
 [ "$RC" -eq 0 ] || exit "$RC"
-OUT="$("$PY" -c 'from functions.prepare import load_config, out_root; print(out_root(load_config()))')"
-mkdir -p "$OUT"
+"$ROOT/scripts/internal/agent.sh" --check     # fail once, with install/login help, if the agent CLI is missing
 
 FAILED=0
 while IFS= read -r PAPER; do
   echo "[digest] === $PAPER"
-  # stdin from /dev/null so claude does not consume the paper list.
-  claude -p "/paper-digest -n \"$PAPER\"" \
-    --add-dir "$OUT" \
-    --permission-mode acceptEdits \
-    --allowedTools "Bash(scripts/internal/*)" \
-    < /dev/null || { echo "[digest] FAILED: $PAPER" >&2; FAILED=$((FAILED + 1)); }
+  "$ROOT/scripts/internal/agent.sh" paper-digest "-n \"$PAPER\"" \
+    || { echo "[digest] FAILED: $PAPER" >&2; FAILED=$((FAILED + 1)); }
 done <<< "$LIST"
 
 echo "[digest] done, $FAILED failed"

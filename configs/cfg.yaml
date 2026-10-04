@@ -1,7 +1,21 @@
 # Output root for paper folders.
 # Empty = <project>/out. Relative paths resolve from the project root; absolute paths and ~ work too
 # (e.g. a folder inside an Obsidian vault). The folder structure below src/ is mirrored here.
+# src/ is never modified; <out_dir>/.paper-registry.yaml records which PDFs are done (safe to delete, it is rebuilt).
 out_dir:
+
+# Language of the viewer translations and figure notes (ISO 639-1 code: ko, ja, zh, de, fr, ...).
+# Each language keeps its own files (.work/translate/pNNN.<lang>.md), so switching does not overwrite another.
+target_lang: ko
+
+# Coding agent that reads the papers and writes reports, translations and notes (see README.md, "Choose your AI").
+#   claude: Claude Code   codex: Codex CLI (ChatGPT / OpenAI)   gemini: Gemini CLI (Google)
+# Log in with the CLI itself (subscription or API key); no key goes in this file.
+# model: empty = the CLI's default; otherwise any model name that CLI accepts.
+# One-off override without editing this file: PAPER_AGENT=gemini scripts/digest.sh
+agent:
+  backend: claude
+  model: ""
 
 # Max words kept from a long title in the paper name (stopwords dropped).
 title_words: 5

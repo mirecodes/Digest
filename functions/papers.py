@@ -4,6 +4,7 @@ A paper folder is any folder below out_root that holds .work/pages.md (written b
 CLI (used by scripts/annotate.sh): python -m functions.papers [-n NAME]
 """
 import hashlib
+import os
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -24,6 +25,17 @@ VIEWER_DEFAULTS = {
     "auto_annotate": False,
 }
 VERIFY_RE = re.compile(r"verify:\s*(PASS|FAIL)")
+AGENTS = ("claude", "codex", "gemini")
+
+
+def agent_cfg(cfg: dict | None = None) -> dict:
+    """The `agent:` section of configs/cfg.yaml: backend (claude | codex | gemini) and model ("" = CLI default).
+    $PAPER_AGENT overrides the backend for one run."""
+    cfg = load_config() if cfg is None else cfg
+    agent = {"backend": "claude", "model": "", **(cfg.get("agent") or {})}
+    agent["backend"] = str(os.environ.get("PAPER_AGENT") or agent["backend"]).strip().lower()
+    agent["model"] = str(agent["model"] or "").strip()
+    return agent
 
 
 def viewer_cfg(cfg: dict | None = None) -> dict:
