@@ -1,6 +1,7 @@
 """Paper folders under the output root: discovery, stable ids, status, and viewer settings.
 
 A paper folder is any folder below out_root that holds .work/pages.md (written by prepare.py).
+CLI (used by scripts/annotate.sh): python -m functions.papers [-n NAME]
 """
 import hashlib
 import re
@@ -112,6 +113,14 @@ def scan(root: Path | None = None) -> list[PaperEntry]:
     return sorted((entry(f, root) for f in folders), key=lambda e: e.folder_rel)
 
 
+def needs_annotation(e: PaperEntry) -> bool:
+    """Digested with verify PASS, but translation, highlights or figure notes are not complete yet."""
+    if e.status != "ok" or e.digest_verify != "PASS":
+        return False
+    tr, fn = e.translation, e.figure_notes
+    return not e.has_layout or tr["done"] < tr["total"] or e.highlights == 0 or fn["done"] < fn["total"]
+
+
 def resolve_for_annotate(name: str, root: Path | None = None) -> Path:
     """A paper folder path, folder name, or path relative to out_root. Raises ValueError unless exactly one matches."""
     path = Path(name).expanduser()
@@ -121,3 +130,30 @@ def resolve_for_annotate(name: str, root: Path | None = None) -> Path:
     if len(hits) != 1:
         raise ValueError(f"{name!r} matches {len(hits)} paper folders" + (f": {[str(h) for h in hits]}" if hits else ""))
     return hits[0]
+
+
+def main() -> int:
+    """Folders for scripts/annotate.sh: `-n NAME` resolves one; otherwise papers needing annotation (max_papers)."""
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(description="List paper folders for annotation")
+    parser.add_argument("-n", "--name")
+    args = parser.parse_args()
+    if args.name:
+        try:
+            print(resolve_for_annotate(args.name))
+        except ValueError as e:
+            print(f"[papers] ERROR: {e}", file=sys.stderr)
+            return 1
+        return 0
+    cfg = load_config()
+    pending = [e.folder for e in scan() if needs_annotation(e)]
+    limit = int(cfg.get("max_papers") or 0)
+    for folder in pending[:limit] if limit > 0 else pending:
+        print(folder)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

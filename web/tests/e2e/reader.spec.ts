@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function openDemo(page: Page) {
   await page.goto("/");
-  await page.locator("[data-paper-id]", { hasText: "Demo (2024)" }).getByRole("button").click();
+  await page.locator("[data-paper-id]", { hasText: "Demo (2024)" }).getByRole("button", { name: "열기" }).click();
   await expect(page.locator('.pdf-page[data-page="1"] canvas')).toBeVisible();
   await expect(page.locator('.tr-card[data-page="3"]')).toBeVisible();
 }

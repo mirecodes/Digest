@@ -14,6 +14,12 @@ export default defineConfig({
     cwd: process.env.ROOT,
     url: `http://127.0.0.1:${port}/api/papers`,
     reuseExistingServer: false,
-    env: { PAPER_VIEWER_OUT: process.env.PAPER_VIEWER_OUT ?? "", PAPER_VIEWER_LLM: "fake", PYTHONPATH: process.env.ROOT ?? "" },
+    env: {
+      PAPER_VIEWER_OUT: process.env.PAPER_VIEWER_OUT ?? "",
+      PAPER_VIEWER_LLM: "fake",
+      PYTHONPATH: process.env.ROOT ?? "",
+      // stub for scripts/annotate.sh: prints a few lines, no Claude call
+      PAPER_VIEWER_ANNOTATE_CMD: `"${process.env.PY}" -c "import sys, time; print('stub annotate', sys.argv[1]); time.sleep(0.5); print('finished')"`,
+    },
   },
 });

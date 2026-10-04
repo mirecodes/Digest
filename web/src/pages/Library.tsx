@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { listPapers } from "../api/client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { jobEventsUrl, listPapers, startAnnotate } from "../api/client";
 import { navigate } from "../App";
 import { t } from "../i18n";
 import type { PaperEntry } from "../types";
+
+type JobView = { status: string; lines: string[] };
+const LOG_LINES = 200;
 
 function Chips({ p }: { p: PaperEntry }) {
   return (
@@ -16,13 +19,51 @@ function Chips({ p }: { p: PaperEntry }) {
   );
 }
 
+function JobLog({ job }: { job: JobView }) {
+  const ref = useRef<HTMLPreElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+  }, [job.lines.length]);
+  const label = { queued: t("job_queued"), running: t("job_running"), done: t("job_done"), failed: t("job_failed") }[job.status] ?? job.status;
+  return (
+    <div className="job" data-testid="job-log">
+      <span className={`chip ${job.status === "done" ? "ok" : job.status === "failed" ? "bad" : ""}`} data-status={job.status}>{label}</span>
+      <pre ref={ref}>{job.lines.join("\n") || "…"}</pre>
+    </div>
+  );
+}
+
 export default function Library() {
   const [papers, setPapers] = useState<PaperEntry[] | null>(null);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [jobs, setJobs] = useState<Record<string, JobView>>({});
+  const sources = useRef<EventSource[]>([]);
+
+  const refresh = useCallback(() => listPapers().then(setPapers, (e) => setError(String(e.message ?? e))), []);
   useEffect(() => {
-    listPapers().then(setPapers, (e) => setError(String(e.message ?? e)));
-  }, []);
+    refresh();
+    return () => sources.current.forEach((s) => s.close());
+  }, [refresh]);
+
+  const preprocess = async (id: string) => {
+    const update = (fn: (j: JobView) => JobView) => setJobs((all) => ({ ...all, [id]: fn(all[id] ?? { status: "queued", lines: [] }) }));
+    try {
+      const { job_id, status } = await startAnnotate(id);
+      update(() => ({ status, lines: [] }));
+      const es = new EventSource(jobEventsUrl(job_id));
+      sources.current.push(es);
+      es.addEventListener("log", (e) => update((j) => ({ ...j, lines: [...j.lines, JSON.parse(e.data).text].slice(-LOG_LINES) })));
+      es.addEventListener("status", (e) => update((j) => ({ ...j, status: JSON.parse(e.data).status })));
+      es.addEventListener("done", (e) => {
+        update((j) => ({ ...j, status: JSON.parse(e.data).status }));
+        es.close();
+        refresh();
+      });
+    } catch (e) {
+      update(() => ({ status: "failed", lines: [String((e as Error).message ?? e)] }));
+    }
+  };
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -49,15 +90,25 @@ export default function Library() {
         <section key={dir}>
           {dir && <h2>{dir}</h2>}
           <ul className="paper-list">
-            {list.map((p) => (
-              <li key={p.id} data-paper-id={p.id}>
-                <div className="info">
-                  <div className="name">{p.name}</div>
-                  <div className="meta"><span className="num">{p.num_pages} {t("pages")}</span><Chips p={p} /></div>
-                </div>
-                <button className="primary" disabled={p.status === "evicted"} onClick={() => navigate(`/r/${p.id}`)}>{t("open")}</button>
-              </li>
-            ))}
+            {list.map((p) => {
+              const job = jobs[p.id];
+              const busy = job && (job.status === "queued" || job.status === "running");
+              return (
+                <li key={p.id} data-paper-id={p.id}>
+                  <div className="row">
+                    <div className="info">
+                      <div className="name">{p.name}</div>
+                      <div className="meta"><span className="num">{p.num_pages} {t("pages")}</span><Chips p={p} /></div>
+                    </div>
+                    <button disabled={p.status === "evicted" || busy} onClick={() => preprocess(p.id)} title={t("preprocess_hint")}>
+                      {t("preprocess")}
+                    </button>
+                    <button className="primary" disabled={p.status === "evicted"} onClick={() => navigate(`/r/${p.id}`)}>{t("open")}</button>
+                  </div>
+                  {job && <JobLog job={job} />}
+                </li>
+              );
+            })}
           </ul>
         </section>
       ))}

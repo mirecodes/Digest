@@ -29,5 +29,6 @@ web/               viewer frontend (React + Vite + pdf.js); docs/ viewer plan an
 - Plan: docs/viewer-plan.md. Work phase by phase; each phase must pass its acceptance, selftest.sh, and viewer_test.sh.
 - Never generate paper content (translations, highlights, figure notes) in code; tests use fixtures and PAPER_VIEWER_LLM=fake. No real LLM calls in tests.
 - Pre-generated annotations are written only via /paper-annotate (or translate_page), then verify_annotations.sh, then build_viewer.sh.
+  For any request to annotate/translate a paper for the viewer, follow the `/paper-annotate` skill exactly.
 - Coordinates: PDF points, top-left origin, 1-based pages (docs/viewer-plan.md §4.1).
 - Record design decisions in docs/decisions.md.

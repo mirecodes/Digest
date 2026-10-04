@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 
 test("perf: scrolling 50 pages stays free of long tasks", async ({ page }, info) => {
   await page.goto("/");
-  await page.locator("[data-paper-id]", { hasText: "Long Paper (2024)" }).getByRole("button").click();
+  await page.locator("[data-paper-id]", { hasText: "Long Paper (2024)" }).getByRole("button", { name: "열기" }).click();
   await expect(page.locator('.pdf-page[data-page="1"] canvas')).toBeVisible();
   await expect(page.locator('.tr-card[data-page="50"]')).toBeAttached();
   await page.waitForTimeout(1000); // initial render done

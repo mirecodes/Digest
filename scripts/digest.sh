@@ -32,4 +32,10 @@ while IFS= read -r PAPER; do
 done <<< "$LIST"
 
 echo "[digest] done, $FAILED failed"
+
+# viewer.auto_annotate: continue with /paper-annotate for digested papers that passed verify.
+AUTO="$("$PY" -c 'from functions.papers import viewer_cfg; print(int(bool(viewer_cfg()["auto_annotate"])))')"
+if [ "$AUTO" = "1" ]; then
+  "$ROOT/scripts/annotate.sh" || FAILED=$((FAILED + 1))
+fi
 [ "$FAILED" -eq 0 ]

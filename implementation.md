@@ -398,7 +398,7 @@ scripts/internal/viewer_test.sh [--e2e]
 | 0 | textmatch 분리, 합성 fixture, 의존성·setup | done |
 | 1 | layout (블록·단·읽기 순서·피규어 영역), anchor | done |
 | 2 | FastAPI 서버, 라이브러리, 2-pane 리더, **페이지 싱크 스크롤**, 블록 링크 | done |
-| 3 | `/paper-annotate` skill, verify_annotations, viewer.json 번들, 전처리 job | planned |
+| 3 | `/paper-annotate` skill, verify_annotations, viewer.json 번들, 전처리 job | done |
 | 4 | 자동 하이라이트 레이어, **피규어 호버 해설 popover**, bbox 수정 | planned |
 | 5 | LLM 백엔드, 선택/영역 설명, 선택·페이지 번역, 채팅, grounding 배지 | planned |
 | 6 | 사용자 하이라이트·메모, notes.md / annotated.pdf 내보내기 | planned |
@@ -426,5 +426,17 @@ scripts/internal/viewer_test.sh [--e2e]
 - `scripts/internal/viewer_test.sh [--e2e]`: vitest 16개 + (`--e2e`) 빌드 → 임시 out_root에 합성 논문 2편(`python -m functions.fixtures <root>`) → Playwright 5개 (§12.3의 1–3, 9 + 50페이지 성능).
 - 리더: PDF(가상화, 선택 가능한 text layer) | 번역 카드(번역 없으면 원문 회색 이탤릭, 피규어·수식은 이미지) — 페이지 싱크(🔒/`S`), 블록 hover 상호 강조, 번역 블록 클릭 → PDF 이동, PDF `Alt+클릭` → 번역 이동, 페이지 표시기 클릭 → 이동, 줌(−/+/맞춤), 아웃라인, 블록 검색(`/`), 패널 비율 드래그. 단축키 T/S/[/J/K//.
 - 실측: 50페이지 스크롤 시 long task 0, long animation frame 0 (두 패널 모두, 측정 방법은 decisions.md D2-6).
-- 수동 확인 절차: `scripts/setup.sh` → `scripts/viewer.sh` → 라이브러리에서 논문 열기 → 왼쪽을 스크롤하면 오른쪽 카드가 같은 페이지 위치로 따라오는지, 🔒를 끄면 멈추는지, 오른쪽 블록에 올리면 왼쪽에 파란 외곽선이 뜨는지 확인. 아직 번역이 없으므로 오른쪽은 원문 회색 표시가 정상(번역은 Phase 3).
+- 수동 확인 절차: `scripts/setup.sh` → `scripts/viewer.sh` → 라이브러리에서 논문 열기 → 왼쪽을 스크롤하면 오른쪽 카드가 같은 페이지 위치로 따라오는지, 싱크 버튼을 끄면 멈추는지, 오른쪽 블록에 올리면 왼쪽에 파란 외곽선이 뜨는지 확인. 번역이 없는 논문은 오른쪽이 원문 회색 표시.
+- 디자인: `design.md` 토큰·컴포넌트 적용 (decisions.md D2-7).
+
+**Phase 3**
+- 실행 절차 (실제 논문 하나):
+  1. `scripts/annotate.sh -n "<폴더 이름>"` — headless Claude Code가 `/paper-annotate`를 실행 (glossary → 페이지별 `pNNN.ko.md` → `highlights.md` → `figure_notes.md` → verify → `viewer.json`). `-n` 없이 실행하면 digest PASS이면서 주석이 미완료인 논문을 `max_papers`개까지.
+     또는 라이브러리의 `전처리` 버튼 (같은 스크립트를 job으로 실행, 로그가 행 아래에 실시간 표시).
+  2. 확인: `scripts/internal/verify_annotations.sh "<폴더>"` → `translation N/N`, `figure notes N/N`, `PASS`.
+  3. `scripts/viewer.sh`로 열어 오른쪽에 한국어 번역이 나오는지 확인.
+- 실측 (vault `Robust Recovery Controller Quadrupedal Robot (2019)`): 5분 7초, 번역 106/106, 하이라이트 45 (evidence 유래), 피규어 해설 13/13, verify PASS (밀도 WARN 6). decisions.md D3-7.
+- 새 명령: `scripts/internal/verify_annotations.sh "<폴더>" [--translation] [--highlights] [--figures]`, `scripts/internal/build_viewer.sh --update-golden`.
+- `scripts/internal/layout.sh`는 폴더 이름도 받는다. `viewer.auto_annotate: true`면 `digest.sh`가 끝에 `annotate.sh`를 실행.
+- 테스트: selftest(+ verify_annotations good/bad, golden 번들, job SSE) / vitest 16 / Playwright 7 (전처리 버튼 stub, 번역 표시 추가).
 

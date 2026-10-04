@@ -10,7 +10,7 @@ Coordinates are PDF points, top-left origin, 1-based pages (docs/viewer-plan.md 
 PyMuPDF's unrotated page space; output rects are mapped through page.rotation_matrix so they match the page as
 displayed (page.rect, pdf.js). Output is deterministic: the same PDF gives byte-identical files.
 
-Usage (via wrapper): scripts/internal/layout.sh "<paper folder>" [--force]
+Usage (via wrapper): scripts/internal/layout.sh "<paper folder | folder name>" [--force]
 """
 import argparse
 import json
@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pymupdf
 
-from functions.papers import find_pdf, viewer_cfg
+from functions.papers import find_pdf, resolve_for_annotate, viewer_cfg
 from functions.verify import WORK_DIR
 
 VERSION = 1
@@ -624,12 +624,14 @@ def build_layout(paper_dir: Path, force: bool = False) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="PDF layout analysis for the paper viewer")
-    parser.add_argument("paper_dir", type=Path)
+    parser.add_argument("paper", help="paper folder path, folder name, or path relative to the output root")
     parser.add_argument("--force", action="store_true", help="re-run even if the layout is up to date")
     args = parser.parse_args()
     try:
-        s = build_layout(args.paper_dir, args.force)
-    except FileNotFoundError as e:
+        folder = resolve_for_annotate(args.paper)
+        print(f"[layout] folder: {folder}")
+        s = build_layout(folder, args.force)
+    except (FileNotFoundError, ValueError) as e:
         print(f"[layout] ERROR: {e}", file=sys.stderr)
         return 1
     note = " (up to date)" if s["skipped"] else ""

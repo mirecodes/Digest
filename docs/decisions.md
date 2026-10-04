@@ -120,3 +120,41 @@
 - 라이브러리는 design.md의 중앙 레인을 따르되 칩이 많아 480px 대신 720px로, 64px 행·헤어라인 구분선 목록으로 바꿨다.
 - 리더는 원문·번역을 나란히 보는 데스크톱 도구라 모바일 우선 480px 레인은 적용하지 않고 토큰·컴포넌트만 적용했다. PDF 페이지는 문서 모양 유지를 위해 4px, 번역 카드는 12px 라운드.
 - 웹 폰트는 내려받지 않는다 (로컬 전용 앱, 시스템 폰트 폴백).
+
+---
+
+## Phase 3
+
+### D3-1. "아직 안 만든 것"과 "틀린 것"의 구분
+- `highlights.md`/`figure_notes.md`가 없으면 검사를 건너뛴다 (오류 아님). `.ko.md`가 없는 페이지는 "미번역"으로 done/total에만 반영한다. Phase 5의 페이지 단위 번역(`translate_page`)이 부분 번역 상태를 정상으로 만들기 때문.
+- 대신 존재하는 파일 안에서는 §5.5 그대로 엄격하다: `.ko.md`에 src 블록이 빠지면 ERROR, 모르는 ID ERROR, `figure_notes.md`가 있으면 모든 피규어에 F 블록이 있어야 ERROR가 없다.
+- skill은 요약 줄의 `translation N/N`과 `figure notes N/N`을 완료 조건으로 확인한다. viewer.json의 `annotations_verify`는 주석 파일이 하나도 없으면 null.
+
+### D3-2. 하이라이트 밀도 규칙의 짧은 논문 처리
+- §6의 "15–40개이면서 ≤ 1.5 × 페이지 수"는 10페이지 미만 논문에서 모순이다 (예: 3페이지 → 상한 4 < 하한 15). 하한을 `min(15, 상한)`으로 둔다. 밀도는 WARN일 뿐이다.
+
+### D3-3. evidence 파서
+- `annotations.parse_evidence`를 새로 두고(loc·category·note까지 읽음) viewer 쪽은 모두 이것을 쓴다. `verify.py`의 `load_evidence`는 그대로 둔다 — digest 검증 동작을 바이트 단위로 유지하기 위해. 블록 문법은 같다.
+
+### D3-4. 번들은 검증 결과에서 만든다
+- `build_viewer`는 `verify_annotations`를 호출해 그 결과를 그대로 묶는다: 앵커링에 성공한 하이라이트, 형식이 맞는 F 블록만 들어간다. 검증과 번들이 다른 기준을 갖는 일을 막는다.
+- §5.5 표 외에 추가한 WARN: 한국어 요약 120자 초과, `요약:` 줄 없음, 이유 없는 SKIP, 같은 피규어의 두 번째 F 블록(첫 번째 사용).
+- golden 번들: `tests/fixtures/viewer.sample.json` (`built_at` 제외 비교). 갱신은 `scripts/internal/build_viewer.sh --update-golden`.
+- fixture의 번역·하이라이트·해설 텍스트(good/bad)는 `fixtures.py`에 있다. 테스트 데이터일 뿐 논문 내용 생성이 아니다 (§14.5). e2e의 Demo 논문도 이제 주석이 붙은 상태로 준비된다.
+
+### D3-5. skill이 쓰는 명령
+- headless 세션은 `Bash(scripts/internal/*)`만 허용되므로, `layout.sh`가 폴더 경로 외에 폴더 이름·out_root 기준 상대경로도 받아 `[layout] folder: <path>`를 출력하게 했다. skill은 이 경로를 이후 단계에 쓴다.
+- `scripts/annotate.sh`는 `-n` 없이 실행하면 "digest verify PASS + 주석 미완료(번역·하이라이트·피규어 해설 중 하나라도)"인 논문을 `max_papers`개까지 처리한다 (`python -m functions.papers`가 목록 제공).
+- `viewer.auto_annotate: true`이면 `digest.sh`가 배치가 끝난 뒤 `annotate.sh`를 실행한다 (같은 선택 규칙이라 방금 PASS한 논문이 포함된다).
+
+### D3-6. 전처리 job
+- 동시에 1개, 나머지는 큐. 같은 폴더의 job이 대기·실행 중이면 새로 만들지 않고 그 job을 돌려준다.
+- 로그는 메모리(SSE 스트림용)와 `.work/viewer/jobs/<timestamp>.log`에 남긴다. 서버 종료 시 실행 중인 프로세스를 terminate.
+- `PAPER_VIEWER_ANNOTATE_CMD` 환경변수로 명령을 바꿀 수 있다. selftest와 e2e는 Claude를 부르지 않는 stub을 쓴다.
+
+### D3-7. 실제 실행 1회 (Phase 3 Acceptance)
+- 대상: vault의 `Robust Recovery Controller Quadrupedal Robot (2019)` (9페이지, 블록 172, 번역 대상 106, 피규어/표 13). 명령 `scripts/annotate.sh -n "Robust Recovery Controller Quadrupedal Robot (2019)"` (Claude Code 2.1.285, headless).
+- 결과: 5분 7초, exit 0. 번역 106/106, 피규어 해설 13/13 (OK 13, SKIP 0), 하이라이트 45개(전부 evidence 유래, H 블록 0), verify_annotations PASS (ERROR 0, WARN 6 — 모두 밀도), viewer.json 생성.
+- headless에서 PNG Read: 허용 플래그(`--allowedTools "Bash(scripts/internal/*)" "Read"`)로 동작했다. 해설에 이미지에서만 읽을 수 있는 내용을 `[FIG: …]`로 표시했고 SKIP이 없었다 (직접 증거는 아니고 결과로 판단).
+- 품질 표본 확인: 번역은 문장 단위로 충실하고 인용 번호 `[16]`이 보존되며 glossary 용어(자세 복원, 행동 선택기 등)가 일관됨. 해설은 `[E#, p.N]`/`[FIG]`/`[INTERP]` 표시가 정확함.
+- **발견:** evidence.md(57블록)의 problem/method/result 등이 자동으로 모두 하이라이트되어 45개가 된다. §6 밀도 규칙(9페이지 → 최대 13, 페이지당 4)을 evidence만으로 넘는다. skill은 evidence를 고칠 수 없으므로 WARN으로 남았다. 해결은 Phase 4(하이라이트 레이어)에서 정한다 — 후보: evidence 유래는 카테고리별 대표만 기본 표시 / 사이드바 필터로 충분 / 밀도 규칙을 H 블록에만 적용.

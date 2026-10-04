@@ -1,0 +1,856 @@
+{
+ "blocks": [
+  {
+   "bbox": [
+    72.0,
+    31.4,
+    100.01,
+    42.39
+   ],
+   "column": -1,
+   "figure_id": null,
+   "id": "p1-b0",
+   "kind": "header_footer",
+   "order": 0,
+   "page": 1,
+   "text": "Preprint",
+   "tr": null,
+   "translate": false
+  },
+  {
+   "bbox": [
+    120.0,
+    70.74,
+    515.05,
+    95.53
+   ],
+   "column": -1,
+   "figure_id": null,
+   "id": "p1-b2",
+   "kind": "heading",
+   "order": 1,
+   "page": 1,
+   "text": "FooNet: Sparse Attention for Long Sequences",
+   "tr": "FooNet: 긴 시퀀스를 위한 희소 어텐션 (FooNet: Sparse Attention for Long Sequences)",
+   "translate": true
+  },
+  {
+   "bbox": [
+    200.0,
+    102.32,
+    373.06,
+    114.69
+   ],
+   "column": -1,
+   "figure_id": null,
+   "id": "p1-b3",
+   "kind": "paragraph",
+   "order": 2,
+   "page": 1,
+   "text": "Alice Kim and Bob Lee, Example University",
+   "tr": "Alice Kim, Bob Lee (Example 대학교)",
+   "translate": true
+  },
+  {
+   "bbox": [
+    72.0,
+    139.3,
+    112.56,
+    153.07
+   ],
+   "column": 0,
+   "figure_id": null,
+   "id": "p1-b4",
+   "kind": "heading",
+   "order": 3,
+   "page": 1,
+   "text": "Abstract",
+   "tr": "초록 (Abstract)",
+   "translate": true
+  },
+  {
+   "bbox": [
+    72.0,
+    156.32,
+    294.6,
+    212.69
+   ],
+   "column": 0,
+   "figure_id": null,
+   "id": "p1-b5",
+   "kind": "paragraph",
+   "order": 4,
+   "page": 1,
+   "text": "We propose FooNet, a sparse attention model for long inputs. Existing methods scale quadratically with sequence length, which limits long-context modeling. In FooNet the memory stays linear in the input length at all times.",
+   "tr": "우리는 긴 입력을 위한 희소 어텐션(sparse attention) 모델인 FooNet을 제안한다. 기존 방법은 시퀀스 길이에 대해 계산량이 이차적으로 늘어나 긴 문맥 모델링이 제한된다. FooNet에서는 메모리가 항상 입력 길이에 선형으로 유지된다.",
+   "translate": true
+  },
+  {
+   "bbox": [
+    72.0,
+    221.32,
+    279.74,
+    255.38
+   ],
+   "column": 0,
+   "figure_id": null,
+   "id": "p1-b6",
+   "kind": "paragraph",
+   "order": 5,
+   "page": 1,
+   "text": "The router is trained with reinforcement learning to select a small set of keys, which gives a ﬁne control over the memory budget.",
+   "tr": "라우터는 강화학습(reinforcement learning)으로 학습되어 작은 키 집합을 선택하며, 이를 통해 메모리 예산을 세밀하게 제어할 수 있다.",
+   "translate": true
+  },
+  {
+   "bbox": [
+    315.0,
+    139.3,
+    381.67,
+    153.07
+   ],
+   "column": 1,
+   "figure_id": null,
+   "id": "p1-b7",
+   "kind": "heading",
+   "order": 6,
+   "page": 1,
+   "text": "1 Introduction",
+   "tr": "1 서론 (Introduction)",
+   "translate": true
+  },
+  {
+   "bbox": [
+    315.0,
+    156.32,
+    539.09,
+    234.69
+   ],
+   "column": 1,
+   "figure_id": null,
+   "id": "p1-b8",
+   "kind": "paragraph",
+   "order": 7,
+   "page": 1,
+   "text": "Long documents, genomes and audio need models that read thousands of tokens at once. Dense attention compares every token with every other token, so its cost grows with the square of the input length and soon exceeds the memory of a single accelerator. We keep the useful part of attention and drop the rest, and in our design the memory stays linear.",
+   "tr": "긴 문서, 유전체, 오디오는 수천 개의 토큰을 한 번에 읽는 모델을 필요로 한다. 밀집 어텐션은 모든 토큰을 다른 모든 토큰과 비교하므로 비용이 입력 길이의 제곱으로 증가하고, 곧 단일 가속기의 메모리를 넘어선다. 우리는 어텐션의 유용한 부분은 유지하고 나머지는 버리며, 우리 설계에서 메모리는 선형으로 유지된다.",
+   "translate": true
+  },
+  {
+   "bbox": [
+    315.0,
+    243.32,
+    537.12,
+    288.69
+   ],
+   "column": 1,
+   "figure_id": null,
+   "id": "p1-b9",
+   "kind": "paragraph",
+   "order": 8,
+   "page": 1,
+   "text": "Our experiments cover text, images and byte-level inputs and compare FooNet with dense and sparse baselines under the same training budget and the same number of parameters.",
+   "tr": "실험은 텍스트, 이미지, 바이트 수준 입력을 다루며, 같은 학습 예산과 같은 파라미터 수에서 FooNet을 밀집 및 희소 기준 모델과 비교한다.",
+   "translate": true
+  },
+  {
+   "bbox": [
+    303.0,
+    756.4,
+    307.45,
+    767.39
+   ],
+   "column": -1,
+   "figure_id": null,
+   "id": "p1-b1",
+   "kind": "header_footer",
+   "order": 9,
+   "page": 1,
+   "text": "1",
+   "tr": null,
+   "translate": false
+  },
+  {
+   "bbox": [
+    72.0,
+    31.4,
+    100.01,
+    42.39
+   ],
+   "column": -1,
+   "figure_id": null,
+   "id": "p2-b0",
+   "kind": "header_footer",
+   "order": 0,
+   "page": 2,
+   "text": "Preprint",
+   "tr": null,
+   "translate": false
+  },
+  {
+   "bbox": [
+    93.0,
+    116.47,
+    200.45,
+    126.09
+   ],
+   "column": 0,
+   "figure_id": "fig-p2-0",
+   "id": "p2-b2",
+   "kind": "figure_text",
+   "order": 1,
+   "page": 2,
+   "text": "Enc Attn",
+   "tr": null,
+   "translate": false
+  },
+  {
+   "bbox": [
+    138.0,
+    196.48,
+    149.28,
+    206.09
+   ],
+   "column": 0,
+   "figure_id": "fig-p2-0",
+   "id": "p2-b3",
+   "kind": "figure_text",
+   "order": 2,
+   "page": 2,
+   "text": "Out",
+   "tr": null,
+   "translate": false
+  },
+  {
+   "bbox": [
+    72.0,
+    230.32,
+    256.57,
+    242.69
+   ],
+   "column": 0,
+   "figure_id": "fig-p2-0",
+   "id": "p2-b4",
+   "kind": "caption",
+   "order": 3,
+   "page": 2,
+   "text": "Figure 1: Overview of the FooNet architecture.",
+   "tr": "그림 1: FooNet 구조 개요.",
+   "translate": true
+  },
+  {
+   "bbox": [
+    72.0,
+    260.33,
+    294.12,
+    316.69
+   ],
+   "column": 0,
+   "figure_id": null,
+   "id": "p2-b5",
+   "kind": "paragraph",
+   "order": 4,
+   "page": 2,
+   "text": "The encoder maps tokens to vectors and the router picks the keys that each query may attend to during the forward pass. The output head mixes the selected values into one vector and passes it on to the next layer of the network.",
+   "tr": "인코더는 토큰을 벡터로 변환하고, 라우터는 순전파 동안 각 쿼리가 주목할 수 있는 키를 고른다. 출력 헤드는 선택된 값을 하나의 벡터로 섞어 네트워크의 다음 층으로 전달한다.",
+   "translate": true
+  },
+  {
+   "bbox": [
+    315.0,
+    90.32,
+    538.12,
+    146.69
+   ],
+   "column": 1,
+   "figure_id": null,
+   "id": "p2-b6",
+   "kind": "paragraph",
+   "order": 5,
+   "page": 2,
+   "text": "As shown in Fig. 1, the router feeds the sparse attention block and the output head. On LRA, FooNet achieves 61.4 average accuracy, compared to 54.4 for the Transformer baseline. The training objective sums the rewards of the router over time.",
+   "tr": "그림 1에서 보듯이 라우터는 희소 어텐션 블록과 출력 헤드에 입력을 공급한다. LRA에서 FooNet은 평균 정확도 61.4를 달성하며, Transformer 기준 모델은 54.4이다. 학습 목표는 시간에 따른 라우터의 보상을 합산한다.",
+   "translate": true
+  },
+  {
+   "bbox": [
+    375.0,
+    159.62,
+    423.29,
+    171.38
+   ],
+   "column": 1,
+   "figure_id": null,
+   "id": "p2-b7",
+   "kind": "equation",
+   "order": 6,
+   "page": 2,
+   "text": "L = Σt rt   (1)",
+   "tr": null,
+   "translate": false
+  },
+  {
+   "bbox": [
+    315.0,
+    185.32,
+    504.59,
+    208.69
+   ],
+   "column": 1,
+   "figure_id": null,
+   "id": "p2-b8",
+   "kind": "paragraph",
+   "order": 7,
+   "page": 2,
+   "text": "Here r_t is the reward at step t and L is the total objective that the router maximizes in training.",
+   "tr": "여기서 r_t는 단계 t의 보상이고 L은 학습 중 라우터가 최대화하는 전체 목표이다.",
+   "translate": true
+  },
+  {
+   "bbox": [
+    303.0,
+    756.4,
+    307.45,
+    767.39
+   ],
+   "column": -1,
+   "figure_id": null,
+   "id": "p2-b1",
+   "kind": "header_footer",
+   "order": 8,
+   "page": 2,
+   "text": "2",
+   "tr": null,
+   "translate": false
+  },
+  {
+   "bbox": [
+    72.0,
+    31.4,
+    100.01,
+    42.39
+   ],
+   "column": -1,
+   "figure_id": null,
+   "id": "p3-b0",
+   "kind": "header_footer",
+   "order": 0,
+   "page": 3,
+   "text": "Preprint",
+   "tr": null,
+   "translate": false
+  },
+  {
+   "bbox": [
+    150.0,
+    236.32,
+    406.15,
+    248.69
+   ],
+   "column": -1,
+   "figure_id": "fig-p3-0",
+   "id": "p3-b2",
+   "kind": "caption",
+   "order": 1,
+   "page": 3,
+   "text": "Figure 2: Attention patterns of FooNet on a long input sequence.",
+   "tr": "그림 2: 긴 입력 시퀀스에서 FooNet의 어텐션 패턴.",
+   "translate": true
+  },
+  {
+   "bbox": [
+    72.0,
+    270.33,
+    193.07,
+    282.69
+   ],
+   "column": 0,
+   "figure_id": "fig-p3-1",
+   "id": "p3-b3",
+   "kind": "caption",
+   "order": 2,
+   "page": 3,
+   "text": "Table 1: Ablation of the router.",
+   "tr": "표 1: 라우터 제거 실험(ablation).",
+   "translate": true
+  },
+  {
+   "bbox": [
+    76.0,
+    294.4,
+    239.11,
+    305.39
+   ],
+   "column": 0,
+   "figure_id": "fig-p3-1",
+   "id": "p3-b4",
+   "kind": "table_text",
+   "order": 3,
+   "page": 3,
+   "text": "Variant Acc Mem",
+   "tr": null,
+   "translate": false
+  },
+  {
+   "bbox": [
+    76.0,
+    314.4,
+    232.45,
+    325.39
+   ],
+   "column": 0,
+   "figure_id": "fig-p3-1",
+   "id": "p3-b5",
+   "kind": "table_text",
+   "order": 4,
+   "page": 3,
+   "text": "FooNet 61.4 1.0",
+   "tr": null,
+   "translate": false
+  },
+  {
+   "bbox": [
+    76.0,
+    334.4,
+    232.45,
+    345.39
+   ],
+   "column": 0,
+   "figure_id": "fig-p3-1",
+   "id": "p3-b6",
+   "kind": "table_text",
+   "order": 5,
+   "page": 3,
+   "text": "No router 57.2 1.0",
+   "tr": null,
+   "translate": false
+  },
+  {
+   "bbox": [
+    72.0,
+    370.33,
+    294.09,
+    426.69
+   ],
+   "column": 0,
+   "figure_id": null,
+   "id": "p3-b7",
+   "kind": "paragraph",
+   "order": 6,
+   "page": 3,
+   "text": "Table 1 shows that removing the router lowers the accuracy of the model by a clear margin while the memory use stays exactly the same. This confirms that the learned sparsity pattern is what matters most for the final accuracy of the model.",
+   "tr": "표 1은 라우터를 제거하면 메모리 사용량은 그대로인 채 모델 정확도가 뚜렷하게 떨어짐을 보여준다. 이는 학습된 희소성 패턴이 최종 정확도에 가장 중요하다는 것을 확인해 준다.",
+   "translate": true
+  },
+  {
+   "bbox": [
+    315.0,
+    269.3,
+    368.91,
+    283.07
+   ],
+   "column": 1,
+   "figure_id": null,
+   "id": "p3-b8",
+   "kind": "heading",
+   "order": 7,
+   "page": 3,
+   "text": "References",
+   "tr": "참고문헌 (References)",
+   "translate": true
+  },
+  {
+   "bbox": [
+    315.0,
+    289.4,
+    475.09,
+    311.39
+   ],
+   "column": 1,
+   "figure_id": null,
+   "id": "p3-b9",
+   "kind": "reference",
+   "order": 8,
+   "page": 3,
+   "text": "[1] A. Vaswani et al. Attention is all you need. In NeurIPS, 2017.",
+   "tr": null,
+   "translate": false
+  },
+  {
+   "bbox": [
+    315.0,
+    321.4,
+    492.87,
+    343.39
+   ],
+   "column": 1,
+   "figure_id": null,
+   "id": "p3-b10",
+   "kind": "reference",
+   "order": 9,
+   "page": 3,
+   "text": "[2] I. Beltagy et al. Longformer: the long-document transformer. arXiv, 2020.",
+   "tr": null,
+   "translate": false
+  },
+  {
+   "bbox": [
+    303.0,
+    756.4,
+    307.45,
+    767.39
+   ],
+   "column": -1,
+   "figure_id": null,
+   "id": "p3-b1",
+   "kind": "header_footer",
+   "order": 10,
+   "page": 3,
+   "text": "3",
+   "tr": null,
+   "translate": false
+  }
+ ],
+ "evidence": {
+  "E1": {
+   "category": "problem",
+   "loc": "Abstract",
+   "page": 1,
+   "quote": "Existing methods scale quadratically with sequence length, which limits long-context modeling."
+  },
+  "E2": {
+   "category": "result",
+   "loc": "Sec 2",
+   "page": 2,
+   "quote": "FooNet achieves 61.4 average accuracy, compared to 54.4 for the Transformer baseline."
+  },
+  "E3": {
+   "category": "contribution",
+   "loc": "Abstract",
+   "page": 1,
+   "quote": "We propose FooNet, a sparse attention model for long inputs."
+  },
+  "E4": {
+   "category": "method",
+   "loc": "Abstract",
+   "page": 1,
+   "quote": "The router is trained with reinforcement learning to select a small set of keys"
+  }
+ },
+ "figures": [
+  {
+   "bbox": [
+    85.0,
+    100.0,
+    245.0,
+    220.0
+   ],
+   "bbox_source": "auto",
+   "caption_block": "p2-b4",
+   "confidence": 0.9,
+   "id": "fig-p2-0",
+   "image_url": "/api/papers/dc6de60b69b0/figures/fig-p2-0.png",
+   "kind": "figure",
+   "label": "Figure 1",
+   "note": {
+    "en": {
+     "body_md": "How to read: boxes are modules, arrows show the data flow.\n- Average LRA accuracy is 61.4 [E2, p.2]\n- The router sitting before attention seems to be the point of the figure [INTERP]\nLink to text: structural basis for C1.",
+     "summary": "Overview of FooNet: encoder → attention → output."
+    },
+    "ko": {
+     "body_md": "읽는 법: 상자는 모듈, 화살표는 데이터 흐름이다.\n- LRA 평균 정확도는 61.4이다 [E2, p.2]\n- 라우터가 어텐션 앞에 놓인 점이 그림의 요지로 보인다 [INTERP]\n본문 연결: C1의 구조적 근거.",
+     "summary": "인코더 → 어텐션 → 출력으로 이어지는 FooNet 구조 개요도."
+    },
+    "status": "OK"
+   },
+   "page": 2,
+   "refs": [
+    {
+     "block": "p2-b6",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "bbox": [
+    72.0,
+    70.0,
+    540.0,
+    230.0
+   ],
+   "bbox_source": "auto",
+   "caption_block": "p3-b2",
+   "confidence": 0.9,
+   "id": "fig-p3-0",
+   "image_url": "/api/papers/dc6de60b69b0/figures/fig-p3-0.png",
+   "kind": "figure",
+   "label": "Figure 2",
+   "note": {
+    "en": {
+     "body_md": "- Bright regions appear to weigh about 0.8 [FIG: fig-p3-0]",
+     "summary": "Attention patterns on a long input, shown as colors."
+    },
+    "ko": {
+     "body_md": "- 밝은 영역의 가중치가 약 0.8로 보인다 [FIG: fig-p3-0]",
+     "summary": "긴 입력에서의 어텐션 패턴을 색으로 보여준다."
+    },
+    "status": "OK"
+   },
+   "page": 3,
+   "refs": []
+  },
+  {
+   "bbox": [
+    72.0,
+    290.0,
+    290.0,
+    350.0
+   ],
+   "bbox_source": "auto",
+   "caption_block": "p3-b3",
+   "confidence": 0.9,
+   "id": "fig-p3-1",
+   "image_url": "/api/papers/dc6de60b69b0/figures/fig-p3-1.png",
+   "kind": "table",
+   "label": "Table 1",
+   "note": {
+    "reason": "the table is fully explained by the text on the same page",
+    "status": "SKIP"
+   },
+   "page": 3,
+   "refs": [
+    {
+     "block": "p3-b7",
+     "page": 3
+    }
+   ]
+  }
+ ],
+ "highlights": [
+  {
+   "category": "problem",
+   "id": "E1",
+   "note_en": null,
+   "note_ko": "기존 방법의 이차 복잡도 문제",
+   "page": 1,
+   "quote": "Existing methods scale quadratically with sequence length, which limits long-context modeling.",
+   "rects": [
+    [
+     101.02,
+     167.32,
+     264.57,
+     179.69
+    ],
+    [
+     72.0,
+     178.32,
+     282.09,
+     190.69
+    ]
+   ],
+   "source": "evidence"
+  },
+  {
+   "category": "result",
+   "id": "E2",
+   "note_en": null,
+   "note_ko": "LRA 주요 결과",
+   "page": 2,
+   "quote": "FooNet achieves 61.4 average accuracy, compared to 54.4 for the Transformer baseline.",
+   "rects": [
+    [
+     460.59,
+     101.32,
+     528.12,
+     113.69
+    ],
+    [
+     315.0,
+     112.32,
+     509.1,
+     124.69
+    ],
+    [
+     315.0,
+     123.32,
+     402.53,
+     135.69
+    ]
+   ],
+   "source": "evidence"
+  },
+  {
+   "category": "contribution",
+   "id": "E3",
+   "note_en": null,
+   "note_ko": "핵심 기여",
+   "page": 1,
+   "quote": "We propose FooNet, a sparse attention model for long inputs.",
+   "rects": [
+    [
+     72.0,
+     156.32,
+     288.6,
+     168.69
+    ],
+    [
+     72.0,
+     167.32,
+     98.51,
+     179.69
+    ]
+   ],
+   "source": "evidence"
+  },
+  {
+   "category": "method",
+   "id": "E4",
+   "note_en": null,
+   "note_ko": "강화학습으로 학습되는 라우터",
+   "page": 1,
+   "quote": "The router is trained with reinforcement learning to select a small set of keys",
+   "rects": [
+    [
+     72.0,
+     221.32,
+     191.54,
+     233.69
+    ],
+    [
+     72.0,
+     232.32,
+     261.58,
+     244.69
+    ]
+   ],
+   "source": "evidence"
+  },
+  {
+   "category": "method",
+   "id": "H1",
+   "note_en": "The router connects attention and the output head",
+   "note_ko": "라우터가 어텐션과 출력 헤드를 연결하는 구조",
+   "page": 2,
+   "quote": "the router feeds the sparse attention block and the output head",
+   "rects": [
+    [
+     393.53,
+     90.32,
+     538.12,
+     102.69
+    ],
+    [
+     315.0,
+     101.32,
+     421.07,
+     113.69
+    ]
+   ],
+   "source": "highlight"
+  },
+  {
+   "category": "result",
+   "id": "H2",
+   "note_en": "Removing the router lowers accuracy (ablation)",
+   "note_ko": "라우터 제거 시 정확도 하락 (ablation)",
+   "page": 3,
+   "quote": "removing the router lowers the accuracy of the model by a clear margin",
+   "rects": [
+    [
+     150.04,
+     370.33,
+     271.58,
+     382.69
+    ],
+    [
+     72.0,
+     381.33,
+     231.56,
+     393.69
+    ]
+   ],
+   "source": "highlight"
+  }
+ ],
+ "outline": [
+  {
+   "block_id": "p1-b2",
+   "level": 1,
+   "page": 1,
+   "title": "FooNet: Sparse Attention for Long Sequences"
+  },
+  {
+   "block_id": "p1-b4",
+   "level": 1,
+   "page": 1,
+   "title": "Abstract"
+  },
+  {
+   "block_id": "p1-b7",
+   "level": 1,
+   "page": 1,
+   "title": "1 Introduction"
+  },
+  {
+   "block_id": "p3-b8",
+   "level": 1,
+   "page": 3,
+   "title": "References"
+  }
+ ],
+ "pages": [
+  {
+   "body_font_size": 9.0,
+   "column_split": 304.8,
+   "columns": 2,
+   "height": 792.0,
+   "page": 1,
+   "rotation": 0,
+   "width": 612.0
+  },
+  {
+   "body_font_size": 9.0,
+   "column_split": 304.56,
+   "columns": 2,
+   "height": 792.0,
+   "page": 2,
+   "rotation": 0,
+   "width": 612.0
+  },
+  {
+   "body_font_size": 9.0,
+   "column_split": 304.55,
+   "columns": 2,
+   "height": 792.0,
+   "page": 3,
+   "rotation": 0,
+   "width": 612.0
+  }
+ ],
+ "paper": {
+  "authors": "Alice Kim, Bob Lee",
+  "digest_verify": "PASS",
+  "folder_rel": "Demo (2024)",
+  "id": "dc6de60b69b0",
+  "name": "Demo (2024)",
+  "num_pages": 3,
+  "pdf_url": "/api/papers/dc6de60b69b0/pdf",
+  "title": "FooNet: Sparse Attention for Long Sequences",
+  "venue_year": "Preprint, 2024"
+ },
+ "status": {
+  "annotations_verify": "PASS",
+  "figure_notes": {
+   "done": 3,
+   "total": 3
+  },
+  "highlights": 6,
+  "layout": true,
+  "translation": {
+   "done": 16,
+   "total": 16
+  },
+  "warnings": 1
+ },
+ "version": 1
+}

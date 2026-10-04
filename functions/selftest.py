@@ -11,8 +11,10 @@ from pathlib import Path
 import pymupdf
 
 from functions.anchor import anchor_quote
+from functions.build_viewer import GOLDEN, build_viewer
 from functions.extract_pdf import extract
-from functions.fixtures import build_foonet
+from functions.fixtures import build_foonet, prepare_demo, write_annotations
+from functions.verify_annotations import verify_annotations
 from functions.layout import build_layout
 from functions.paper_name import Meta, find_arxiv_id, format_name
 from functions.papers import paper_id, resolve_for_annotate, scan
@@ -228,6 +230,39 @@ def check_papers(root: Path, paper: Path, failures: list) -> None:
         failures.append(f"papers: unexpected entry {entries[0]}")
 
 
+EXPECTED_ANNOTATION_ERRORS = [
+    "missing translation for p2-b5", "unknown block p9-b9", "H3: quote not found", "H4: category 'novelty'",
+    "figure 'fig-p9-0' is not in", "unknown evidence E9", "[FIG: fig-nope] refers to an unknown figure",
+]
+EXPECTED_ANNOTATION_WARNINGS = ["p2-b6 drops numbers ['61.4']"]
+
+
+def check_annotations(root: Path, failures: list) -> None:
+    paper = prepare_demo(root / "annotated" / "Demo (2024)")
+    r = verify_annotations(paper)
+    if r["errors"]:
+        failures.append(f"verify_annotations: good case should pass but got {r['errors']}")
+    if r["translation"] != {"done": 16, "total": 16} or len(r["highlights"]) != 6 or len(r["notes"]) != 3:
+        failures.append(f"verify_annotations: unexpected counts {r['translation']}, {len(r['highlights'])}, {len(r['notes'])}")
+
+    golden = json.loads(GOLDEN.read_text(encoding="utf-8")) if GOLDEN.is_file() else None
+    got = json.loads(build_viewer(paper, root / "annotated").read_text(encoding="utf-8"))
+    got.pop("built_at")
+    if got != golden:
+        diff = sorted(k for k in set(got) | set(golden or {}) if got.get(k) != (golden or {}).get(k))
+        failures.append(f"build_viewer: bundle differs from {GOLDEN.name} in {diff} "
+                        "(if the schema changed on purpose: scripts/internal/build_viewer.sh --update-golden)")
+
+    write_annotations(paper, "bad")
+    r = verify_annotations(paper)
+    for expected in EXPECTED_ANNOTATION_ERRORS:
+        if not any(expected in e for e in r["errors"]):
+            failures.append(f"verify_annotations bad case: expected error containing {expected!r}")
+    for expected in EXPECTED_ANNOTATION_WARNINGS:
+        if not any(expected in w for w in r["warnings"]):
+            failures.append(f"verify_annotations bad case: expected warning containing {expected!r}")
+
+
 def check_server(root: Path, failures: list) -> None:
     os.environ["PAPER_VIEWER_OUT"] = str(root)
     os.environ["PAPER_VIEWER_LLM"] = "fake"
@@ -260,6 +295,15 @@ def check_server(root: Path, failures: list) -> None:
         if got != want:
             failures.append(f"server: {name}: expected {want}, got {got}")
 
+    # preprocessing job with a stub command instead of scripts/annotate.sh (no Claude call)
+    os.environ["PAPER_VIEWER_ANNOTATE_CMD"] = f'"{sys.executable}" -c "import sys; print(\'stub annotate\', sys.argv[1])"'
+    job = client.post(f"{api}/annotate").json()
+    events = client.get(f"/api/jobs/{job.get('job_id')}/events").text
+    if "stub annotate" not in events or 'event: done\ndata: {"status": "done", "returncode": 0}' not in events:
+        failures.append(f"server: annotate job stream unexpected: {events[:300]!r}")
+    if client.get("/api/jobs/nope/events").status_code != 404:
+        failures.append("server: unknown job should be 404")
+
 
 def main() -> int:
     failures = []
@@ -290,6 +334,7 @@ def main() -> int:
         check_anchor(paper / "paper.pdf", truth, failures)
         check_papers(Path(tmp) / "out", paper, failures)
         check_server(Path(tmp) / "out", failures)
+        check_annotations(Path(tmp), failures)
 
     for f in failures:
         print(f"  FAIL  {f}")

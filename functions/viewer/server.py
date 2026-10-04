@@ -6,17 +6,21 @@ output root; paths that resolve outside their paper folder are refused. API: doc
 Environment: PAPER_VIEWER_OUT overrides the output root (tests use a temporary one).
 """
 import hashlib
+import json
 import re
+import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pymupdf
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from functions.build_viewer import ensure_viewer, viewer_root
 from functions.papers import find_pdf, is_evicted, scan, viewer_cfg
 from functions.verify import WORK_DIR
+from functions.viewer.jobs import JOBS
 
 DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
 PDFJS = Path(__file__).resolve().parents[2] / "web" / "node_modules" / "pdfjs-dist"
@@ -27,7 +31,13 @@ MAX_DPI = 300
 NO_BUILD_HTML = """<!doctype html><meta charset="utf-8"><title>Paper Viewer</title>
 <p style="font-family:sans-serif">The viewer frontend is not built yet. Run <code>scripts/setup.sh</code> (needs Node &ge; 20).</p>"""
 
-app = FastAPI(title="Paper Viewer", docs_url=None, redoc_url=None)
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    yield
+    JOBS.shutdown()
+
+
+app = FastAPI(title="Paper Viewer", docs_url=None, redoc_url=None, lifespan=_lifespan)
 _papers: dict[str, Path] = {}
 
 
@@ -116,6 +126,42 @@ def crop(pid: str, page: int, bbox: str, dpi: int = 200):
         out.parent.mkdir(parents=True, exist_ok=True)
         doc[page - 1].get_pixmap(clip=rect & doc[page - 1].rect, dpi=dpi).save(out)
     return FileResponse(out, media_type="image/png")
+
+
+@app.post("/api/papers/{pid}/annotate")
+def annotate(pid: str):
+    job = JOBS.submit(_folder(pid))
+    return {"job_id": job.id, "status": job.status}
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@app.get("/api/jobs/{job_id}/events")
+def job_events(job_id: str):
+    """SSE: `log` per output line, `status` on changes, `done` at the end."""
+    job = JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(404, "unknown job")
+
+    def stream():
+        sent, status = 0, None
+        while True:
+            finished = job.finished       # read before the lines so no line is missed at the end
+            lines = job.lines[sent:]
+            for line in lines:
+                yield _sse("log", {"text": line})
+            sent += len(lines)
+            if job.status != status:
+                status = job.status
+                yield _sse("status", {"status": status})
+            if finished:
+                yield _sse("done", {"status": job.status, "returncode": job.returncode})
+                return
+            time.sleep(0.25)
+
+    return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
 
 # ---- frontend (single-page app: / and /r/<id> both serve index.html)
