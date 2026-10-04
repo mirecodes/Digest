@@ -246,6 +246,7 @@
   - 검증: 핵심 5개(problem, prior_work, contribution, method, result) 누락 시 WARN, 메모 없으면 WARN. `assumption`은 논문에 따라 없을 수 있어 필수에서 뺐다.
   - 스키마 VERSION 3 (`source` 필드 삭제). 쓰이지 않던 `viewer.highlight_default_categories` 설정 삭제.
 - D4-2의 밀도 문제는 이것으로 해소된다 (3번안보다 근본적인 해결).
+- 실제 실행 (vault `Robust Recovery Controller Quadrupedal Robot (2019)`, `scripts/annotate.sh -n … --only highlights`, Claude Code 2.1.285): 1분 17초, exit 0. 하이라이트 45개(evidence) → 20개 (problem 1, prior_work 3, assumption 1, contribution 3, method 4, result 4, insight 2, limitation 2), 페이지당 최대 6, verify_annotations PASS (ERROR 0, WARN 0). 메모가 "역할: 요약" 형식으로 쓰였고 숫자(97%, 50가지, 1 cm)는 인용 문장에 있는 값이었다.
 - 기존 주석 논문의 highlights.md(H 블록 0개)는 하이라이트가 비게 된다. `Process ▸ Highlights`로 다시 만들어야 하며, Run all의 "완료" 판정도 H 블록 수 기준으로 바꿨다.
 
 ### D4-6. 남은 Phase 4 항목
