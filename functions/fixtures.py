@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pymupdf
 
+from functions.papers import target_lang
+
 W, H = 612.0, 792.0
 LEFT, RIGHT = 72.0, 315.0          # column x0
 COL_W = 225.0
@@ -344,11 +346,13 @@ def write_annotations(paper: Path, variant: str = "good") -> None:
                        '\n### H4\n- category: novelty\n- page: 1\n- quote: "We propose FooNet"\n')
         notes = notes.replace("[E2, p.2]", "[E9, p.2]").replace("[FIG: fig-p3-0]", "[FIG: fig-nope]")
         notes += "\n### F4\n- figure: fig-p9-0\n- status: SKIP\n- reason: does not exist\n"
+    # The fixture text is Korean; files and section names follow target_lang so the checks run under any config.
+    lang = target_lang()
     for page, blocks in pages.items():
         body = "".join(f"<!-- BLOCK {bid} -->\n{text}\n\n" for bid, text in blocks.items())
-        (work / "translate" / f"p{page:03d}.ko.md").write_text(body, encoding="utf-8")
-    (work / "highlights.md").write_text(highlights, encoding="utf-8")
-    (work / "figure_notes.md").write_text(notes, encoding="utf-8")
+        (work / "translate" / f"p{page:03d}.{lang}.md").write_text(body, encoding="utf-8")
+    (work / "highlights.md").write_text(highlights.replace("- note_ko:", f"- note_{lang}:"), encoding="utf-8")
+    (work / "figure_notes.md").write_text(notes.replace("#### ko", f"#### {lang}"), encoding="utf-8")
 
 
 def prepare_demo(folder: Path, annotated: bool = True) -> Path:
@@ -366,19 +370,26 @@ def prepare_demo(folder: Path, annotated: bool = True) -> Path:
     return folder
 
 
-def prepare_e2e(root: Path) -> None:
-    """Two digested-looking papers under root for the viewer end-to-end tests: annotated FooNet and a long paper."""
+def prepare_e2e(root: Path, src: Path | None = None) -> None:
+    """Papers for the viewer end-to-end tests: annotated FooNet and a long paper under root; with src, also a src/
+    folder holding a new paper (inbox/fresh.pdf) and a copy of the FooNet PDF (dup.pdf, must not show up as new)."""
+    import shutil
+
     from functions.extract_pdf import extract
     from functions.layout import build_layout
 
-    prepare_demo(root / "Demo (2024)")
+    demo = prepare_demo(root / "Demo (2024)")
     folder = root / "long" / "Long Paper (2024)"
     build_long(folder / f"{folder.name}.pdf")
     extract(folder / f"{folder.name}.pdf", folder / ".work")
     build_layout(folder, force=True)
+    if src:
+        (src / "inbox").mkdir(parents=True, exist_ok=True)
+        build_long(src / "inbox" / "fresh.pdf", pages=4)
+        shutil.copy2(demo / f"{demo.name}.pdf", src / "dup.pdf")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        sys.exit("usage: python -m functions.fixtures <out_root>")
-    prepare_e2e(Path(sys.argv[1]))
+    if len(sys.argv) not in (2, 3):
+        sys.exit("usage: python -m functions.fixtures <out_root> [<src_dir>]")
+    prepare_e2e(Path(sys.argv[1]), Path(sys.argv[2]) if len(sys.argv) == 3 else None)

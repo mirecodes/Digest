@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pymupdf
 
-from functions.papers import find_pdf, resolve_for_annotate, viewer_cfg
+from functions.papers import find_pdf, resolve_for_annotate, target_lang, viewer_cfg
 from functions.verify import WORK_DIR
 
 VERSION = 1
@@ -630,6 +630,7 @@ def main() -> int:
     try:
         folder = resolve_for_annotate(args.paper)
         print(f"[layout] folder: {folder}")
+        print(f"[layout] target_lang: {target_lang()}")
         s = build_layout(folder, args.force)
     except (FileNotFoundError, ValueError) as e:
         print(f"[layout] ERROR: {e}", file=sys.stderr)

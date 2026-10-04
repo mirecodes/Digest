@@ -1,21 +1,93 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { jobEventsUrl, listPapers, startAnnotate } from "../api/client";
+import { jobEventsUrl, listPapers, startJob } from "../api/client";
 import { navigate } from "../App";
-import { t } from "../i18n";
-import type { PaperEntry } from "../types";
+import { t, type Key } from "../i18n";
+import { CheckIcon, ChevronDownIcon } from "../reader/icons";
+import type { Action, PaperEntry } from "../types";
 
-type JobView = { status: string; lines: string[] };
+type JobView = { status: string; action: Action; lines: string[] };
 const LOG_LINES = 200;
+const ACTIONS: { action: Action; label: Key; hint: Key }[] = [
+  { action: "all", label: "action_all", hint: "action_all_hint" },
+  { action: "digest", label: "action_digest", hint: "action_digest_hint" },
+  { action: "translation", label: "action_translation", hint: "action_translation_hint" },
+  { action: "highlights", label: "action_highlights", hint: "action_highlights_hint" },
+  { action: "figures", label: "action_figures", hint: "action_figures_hint" },
+];
+
+const complete = (c: { done: number; total: number }) => c.total > 0 && c.done === c.total;
+
+/** Whether an action is already done for the paper, and why it cannot run (null = it can). */
+function actionState(p: PaperEntry, a: Action): { done: boolean; blocked: Key | null } {
+  const digested = p.digest_verify === "PASS";
+  const done = {
+    digest: digested,
+    translation: complete(p.translation),
+    highlights: p.highlights > 0,
+    figures: complete(p.figure_notes),
+    all: digested && complete(p.translation) && p.highlights > 0 && complete(p.figure_notes),
+  }[a];
+  const blocked: Key | null =
+    a === "digest" && digested ? "already_done" : p.status === "new" && a !== "all" && a !== "digest" ? "needs_digest" : null;
+  return { done, blocked };
+}
 
 function Chips({ p }: { p: PaperEntry }) {
+  if (p.status === "new") return <span className="chips"><span className="chip warn">{t("new_paper")}</span></span>;
   return (
     <span className="chips">
-      {p.digest_verify && <span className={`chip ${p.digest_verify === "PASS" ? "ok" : "bad"}`}>digest {p.digest_verify}</span>}
+      {p.digest_verify && <span className={`chip ${p.digest_verify === "PASS" ? "ok" : "bad"}`}>{t("summary")} {p.digest_verify}</span>}
       <span className="chip">{t("translation")} {p.translation.done}/{p.translation.total}</span>
       <span className="chip">{t("highlights")} {p.highlights}</span>
       <span className="chip">{t("figure_notes")} {p.figure_notes.done}/{p.figure_notes.total}</span>
       {p.status === "evicted" && <span className="chip warn">{t("evicted")}</span>}
     </span>
+  );
+}
+
+function ProcessMenu({ p, busy, onRun }: { p: PaperEntry; busy: boolean; onRun: (a: Action) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const escape = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+  return (
+    <div className="menu-wrap" ref={ref}>
+      <button aria-haspopup="menu" aria-expanded={open} disabled={p.status === "evicted" || busy} onClick={() => setOpen((o) => !o)} title={t("process_hint")}>
+        {t("process")} <ChevronDownIcon />
+      </button>
+      {open && (
+        <div className="menu" role="menu">
+          {ACTIONS.map(({ action, label, hint }) => {
+            const { done, blocked } = actionState(p, action);
+            return (
+              <button
+                key={action}
+                role="menuitem"
+                data-action={action}
+                disabled={blocked !== null}
+                title={t(blocked ?? hint)}
+                onClick={() => {
+                  setOpen(false);
+                  onRun(action);
+                }}
+              >
+                <span>{t(label)}</span>
+                {done && <span className="done" aria-label={t("already_done")}><CheckIcon /></span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -25,9 +97,12 @@ function JobLog({ job }: { job: JobView }) {
     if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
   }, [job.lines.length]);
   const label = { queued: t("job_queued"), running: t("job_running"), done: t("job_done"), failed: t("job_failed") }[job.status] ?? job.status;
+  const action = ACTIONS.find((a) => a.action === job.action);
   return (
     <div className="job" data-testid="job-log">
-      <span className={`chip ${job.status === "done" ? "ok" : job.status === "failed" ? "bad" : ""}`} data-status={job.status}>{label}</span>
+      <span className={`chip ${job.status === "done" ? "ok" : job.status === "failed" ? "bad" : ""}`} data-status={job.status}>
+        {action ? `${t(action.label)} · ` : ""}{label}
+      </span>
       <pre ref={ref}>{job.lines.join("\n") || "…"}</pre>
     </div>
   );
@@ -46,12 +121,13 @@ export default function Library() {
     return () => sources.current.forEach((s) => s.close());
   }, [refresh]);
 
-  const preprocess = async (id: string) => {
-    const update = (fn: (j: JobView) => JobView) => setJobs((all) => ({ ...all, [id]: fn(all[id] ?? { status: "queued", lines: [] }) }));
+  const run = async (id: string, action: Action) => {
+    const update = (fn: (j: JobView) => JobView) =>
+      setJobs((all) => ({ ...all, [id]: fn(all[id] ?? { status: "queued", action, lines: [] }) }));
     try {
-      const { job_id, status } = await startAnnotate(id);
-      update(() => ({ status, lines: [] }));
-      const es = new EventSource(jobEventsUrl(job_id));
+      const job = await startJob(id, action);
+      update(() => ({ status: job.status, action: job.action, lines: [] }));
+      const es = new EventSource(jobEventsUrl(job.job_id));
       sources.current.push(es);
       es.addEventListener("log", (e) => update((j) => ({ ...j, lines: [...j.lines, JSON.parse(e.data).text].slice(-LOG_LINES) })));
       es.addEventListener("status", (e) => update((j) => ({ ...j, status: JSON.parse(e.data).status })));
@@ -61,7 +137,7 @@ export default function Library() {
         refresh();
       });
     } catch (e) {
-      update(() => ({ status: "failed", lines: [String((e as Error).message ?? e)] }));
+      update(() => ({ status: "failed", action, lines: [String((e as Error).message ?? e)] }));
     }
   };
 
@@ -69,7 +145,7 @@ export default function Library() {
     const q = query.trim().toLowerCase();
     const map = new Map<string, PaperEntry[]>();
     for (const p of papers ?? []) {
-      if (q && !p.folder_rel.toLowerCase().includes(q)) continue;
+      if (q && !p.folder_rel.toLowerCase().includes(q) && !p.name.toLowerCase().includes(q)) continue;
       const dir = p.folder_rel.includes("/") ? p.folder_rel.slice(0, p.folder_rel.lastIndexOf("/")) : "";
       map.set(dir, [...(map.get(dir) ?? []), p]);
     }
@@ -92,18 +168,19 @@ export default function Library() {
           <ul className="paper-list">
             {list.map((p) => {
               const job = jobs[p.id];
-              const busy = job && (job.status === "queued" || job.status === "running");
+              const busy = !!job && (job.status === "queued" || job.status === "running");
               return (
                 <li key={p.id} data-paper-id={p.id}>
                   <div className="row">
                     <div className="info">
                       <div className="name">{p.name}</div>
-                      <div className="meta"><span className="num">{p.num_pages} {t("pages")}</span><Chips p={p} /></div>
+                      <div className="meta">
+                        {p.status !== "new" && <span className="num">{p.num_pages} {t("pages")}</span>}
+                        <Chips p={p} />
+                      </div>
                     </div>
-                    <button disabled={p.status === "evicted" || busy} onClick={() => preprocess(p.id)} title={t("preprocess_hint")}>
-                      {t("preprocess")}
-                    </button>
-                    <button className="primary" disabled={p.status === "evicted"} onClick={() => navigate(`/r/${p.id}`)}>{t("open")}</button>
+                    <ProcessMenu p={p} busy={busy} onRun={(a) => run(p.id, a)} />
+                    <button className="primary" disabled={p.status !== "ok"} onClick={() => navigate(`/r/${p.id}`)}>{t("open")}</button>
                   </div>
                   {job && <JobLog job={job} />}
                 </li>

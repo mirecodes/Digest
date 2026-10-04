@@ -2,8 +2,8 @@
 # Digest papers from src/ with headless Claude Code, one session per paper.
 # Usage: scripts/digest.sh [-n NAME]
 #   -n NAME: one paper (src/ relative path, file name or stem, or a PDF path)
-#   without -n: every PDF in src/, at most max_papers (configs/cfg.yaml) per run.
-# Each processed PDF is moved from src/ into its output folder.
+#   without -n: every src/ PDF without an output folder yet, at most max_papers (configs/cfg.yaml) per run.
+# src/ is left as it is; the registry (<out_dir>/.paper-registry.yaml) records which PDFs are done.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/internal/_env.sh"
 cd "$ROOT"
@@ -16,7 +16,10 @@ case "${1:-}" in
   *) usage ;;
 esac
 
-LIST="$("$PY" -m functions.prepare --list ${NAME:+-n "$NAME"})"
+RC=0
+LIST="$("$PY" -m functions.prepare --list ${NAME:+-n "$NAME"})" || RC=$?
+[ "$RC" -eq 4 ] && exit 0     # already digested (prepare printed why)
+[ "$RC" -eq 0 ] || exit "$RC"
 OUT="$("$PY" -c 'from functions.prepare import load_config, out_root; print(out_root(load_config()))')"
 mkdir -p "$OUT"
 

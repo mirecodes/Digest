@@ -1,11 +1,12 @@
 """Parsers for the viewer's pre-generated annotations (formats: docs/viewer-plan.md §4.4-4.6).
 
   .work/evidence.md         ### E{n} blocks (written by /paper-digest)
-  .work/highlights.md       ### H{n} blocks (written by /paper-annotate)
-  .work/figure_notes.md     ### F{n} blocks with "#### ko" / "#### en" sections
-  .work/translate/pNNN.src.md / pNNN.ko.md   <!-- BLOCK <id> ... --> markers
+  .work/highlights.md       ### H{n} blocks (written by /paper-annotate), notes in `note_<lang>` / `note_en`
+  .work/figure_notes.md     ### F{n} blocks with "#### <lang>" / "#### en" sections
+  .work/translate/pNNN.src.md / pNNN.<lang>.md   <!-- BLOCK <id> ... --> markers
 
-Parsing only; checks live in verify_annotations.py.
+<lang> is target_lang from configs/cfg.yaml (papers.target_lang). Parsed results use the language-neutral keys
+`tr` (target language) and `en`. Parsing only; checks live in verify_annotations.py.
 """
 import re
 from pathlib import Path
@@ -53,9 +54,9 @@ def parse_evidence(md: str) -> dict[str, dict]:
     return out
 
 
-def parse_highlights(md: str) -> list[dict]:
+def parse_highlights(md: str, lang: str) -> list[dict]:
     return [{"id": hid, "category": (_field(body, "category") or "").lower(), "page": _int(_field(body, "page")),
-             "quote": _quote(body), "note_ko": _field(body, "note_ko"), "note_en": _field(body, "note_en")}
+             "quote": _quote(body), "note_tr": _field(body, f"note_{lang}"), "note_en": _field(body, "note_en")}
             for hid, body in _blocks(md, "H")]
 
 
@@ -71,15 +72,13 @@ def _note_section(text: str) -> dict:
     return {"summary": summary, "body_md": "\n".join(rest).strip()}
 
 
-def parse_figure_notes(md: str) -> list[dict]:
+def parse_figure_notes(md: str, lang: str) -> list[dict]:
     notes = []
     for fid, body in _blocks(md, "F"):
-        head, *sections = re.split(r"^####\s+(ko|en)\s*$", body, flags=re.M)
-        note = {"id": fid, "figure": _field(head, "figure"), "status": (_field(head, "status") or "").upper(),
-                "reason": _field(head, "reason"), "ko": None, "en": None}
-        for lang, text in zip(sections[::2], sections[1::2]):
-            note[lang] = _note_section(text)
-        notes.append(note)
+        head, *sections = re.split(r"^####\s+([a-z]{2,3}(?:-\w+)?)\s*$", body, flags=re.M)
+        by_lang = {code: _note_section(text) for code, text in zip(sections[::2], sections[1::2])}
+        notes.append({"id": fid, "figure": _field(head, "figure"), "status": (_field(head, "status") or "").upper(),
+                      "reason": _field(head, "reason"), "tr": by_lang.get(lang), "en": by_lang.get("en")})
     return notes
 
 

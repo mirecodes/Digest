@@ -18,7 +18,7 @@ from pathlib import Path
 
 from functions.annotations import parse_translation
 from functions.layout import build_layout
-from functions.papers import digest_verify, find_pdf, paper_id
+from functions.papers import digest_verify, find_pdf, paper_id, tr_files
 from functions.prepare import ROOT, load_config, out_root
 from functions.verify import WORK_DIR, output_path
 from functions.verify_annotations import verify_annotations
@@ -54,7 +54,7 @@ def inputs(paper_dir: Path) -> list[Path]:
     files = [find_pdf(paper_dir), work / "layout" / "blocks.json", work / "layout" / "figures.json",
              output_path(paper_dir, "report"), work / "evidence.md", work / "highlights.md", work / "figure_notes.md",
              work / "viewer" / "figure_overrides.json"]
-    return [f for f in files if f and f.exists()] + sorted((work / "translate").glob("p*.ko.md"))
+    return [f for f in files if f and f.exists()] + tr_files(work)
 
 
 def build_viewer(paper_dir: Path, root: Path | None = None) -> Path:
@@ -69,20 +69,21 @@ def build_viewer(paper_dir: Path, root: Path | None = None) -> Path:
     api = f"/api/papers/{pid}"
     checked = verify_annotations(paper_dir)
     tr = {}
-    for ko in sorted((work / "translate").glob("p*.ko.md")):
-        tr.update(parse_translation(ko.read_text(encoding="utf-8")))
+    for path in tr_files(work, checked["lang"]):
+        tr.update(parse_translation(path.read_text(encoding="utf-8")))
 
     blocks = [{"id": b["id"], "page": p["page"], "kind": b["kind"], "bbox": b["bbox"], "column": b["column"],
                "order": b["order"], "text": b["text"], "translate": b["translate"], "tr": tr.get(b["id"]) or None,
                "figure_id": b["figure_id"]}
               for p in layout["pages"] for b in p["blocks"]]
     translate_total = sum(b["translate"] for b in blocks)
-    notes = {fid: {k: v for k, v in (("status", n["status"]), ("reason", n["reason"]), ("ko", n["ko"]), ("en", n["en"]))
+    notes = {fid: {k: v for k, v in (("status", n["status"]), ("reason", n["reason"]), ("tr", n["tr"]), ("en", n["en"]))
                    if v is not None} for fid, n in checked["notes"].items()}
     present = checked["present"]
     data = {
         "version": VERSION,
         "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "lang": checked["lang"],
         "paper": {"id": pid, "name": paper_dir.name, "folder_rel": rel.as_posix(), **report_meta(paper_dir),
                   "num_pages": len(layout["pages"]), "pdf_url": f"{api}/pdf", "digest_verify": digest_verify(paper_dir)},
         "pages": [{k: p[k] for k in ("page", "width", "height", "rotation", "columns", "column_split", "body_font_size")}

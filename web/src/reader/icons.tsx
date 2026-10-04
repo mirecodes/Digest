@@ -6,6 +6,8 @@ const Svg = ({ d }: { d: string }) => (
 );
 
 export const BackIcon = () => <Svg d="M15 18l-6-6 6-6" />;
+export const ChevronDownIcon = () => <Svg d="M6 9l6 6 6-6" />;
+export const CheckIcon = () => <Svg d="M5 12l5 5 9-10" />;
 export const LockIcon = () => <Svg d="M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4" />;
 export const UnlockIcon = () => <Svg d="M6 11h12v10H6zM8 11V7a4 4 0 0 1 7.5-2" />;
 export const SidebarIcon = () => <Svg d="M4 5h16v14H4zM9 5v14" />;

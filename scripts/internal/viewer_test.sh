@@ -17,9 +17,9 @@ esac
 npm run test --silent
 if [ "$E2E" -eq 1 ]; then
   npm run build --silent
-  OUT_TMP="$(mktemp -d)"
-  trap 'rm -rf "$OUT_TMP"' EXIT
-  "$PY" -m functions.fixtures "$OUT_TMP"
-  PAPER_VIEWER_OUT="$OUT_TMP" PY="$PY" ROOT="$ROOT" npx playwright test
+  TMP="$(mktemp -d)"
+  trap 'rm -rf "$TMP"' EXIT
+  "$PY" -m functions.fixtures "$TMP/out" "$TMP/src"
+  PAPER_VIEWER_OUT="$TMP/out" PAPER_VIEWER_SRC="$TMP/src" PY="$PY" ROOT="$ROOT" npx playwright test
 fi
 echo "[viewer-test] PASS"

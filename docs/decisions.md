@@ -158,3 +158,38 @@
 - headless에서 PNG Read: 허용 플래그(`--allowedTools "Bash(scripts/internal/*)" "Read"`)로 동작했다. 해설에 이미지에서만 읽을 수 있는 내용을 `[FIG: …]`로 표시했고 SKIP이 없었다 (직접 증거는 아니고 결과로 판단).
 - 품질 표본 확인: 번역은 문장 단위로 충실하고 인용 번호 `[16]`이 보존되며 glossary 용어(자세 복원, 행동 선택기 등)가 일관됨. 해설은 `[E#, p.N]`/`[FIG]`/`[INTERP]` 표시가 정확함.
 - **발견:** evidence.md(57블록)의 problem/method/result 등이 자동으로 모두 하이라이트되어 45개가 된다. §6 밀도 규칙(9페이지 → 최대 13, 페이지당 4)을 evidence만으로 넘는다. skill은 evidence를 고칠 수 없으므로 WARN으로 남았다. 해결은 Phase 4(하이라이트 레이어)에서 정한다 — 후보: evidence 유래는 카테고리별 대표만 기본 표시 / 사이드바 필터로 충분 / 밀도 규칙을 H 블록에만 적용.
+
+## Phase 3.5 — 논문 관리 재구성 (사용자 요청)
+
+### D3.5-1. "Method Not Allowed"의 원인
+- 8765 포트의 서버가 Phase 3 커밋(19:43)보다 먼저(19:27) `--reload` 없이 떠 있었다. 그 코드에는 `POST /annotate`가 없어서, POST가 GET 전용 SPA catch-all에 걸려 405가 났다. 코드 버그가 아니라 오래된 프로세스 문제다.
+- 대응: 재시작. 다시 생겨도 원인을 알 수 있도록 클라이언트가 405를 "서버가 오래됨 — scripts/viewer.sh 재시작"으로 보여준다. 서버 버전 비교 같은 장치는 만들지 않았다 (로컬 1인용).
+
+### D3.5-2. 레지스트리: 내용 해시를 키로 하는 YAML 하나
+- 요구: src/를 지우지 않고, src/·출력 폴더·작업 상태를 한 파일에서 관리해 중복 처리를 막는다.
+- 선택: `<out_dir>/.paper-registry.yaml`. 키 = PDF SHA-256 앞 16자. 항목 = `name`, `folder`(out_dir 기준, 미처리면 null), `sources`(src/ 경로 → `size-mtime_ns`), `state`, `digest`, `translation`, `highlights`, `figure_notes`.
+  - 내용 해시라서 파일 이름이 바뀌거나 같은 PDF가 두 번 들어와도 한 논문이다. 파일 경로를 키로 쓰면 이름만 바꿔도 다시 처리된다.
+  - 위치를 out_dir에 둔 이유: 레지스트리가 설명하는 대상(출력 폴더)과 함께 움직인다. 점 파일이라 Obsidian 색인에서 빠진다. §14의 vault 쓰기 허용 목록에 이 파일과 `.paper-jobs/`(아직 폴더가 없는 논문의 job 로그)를 추가한다.
+  - YAML: 사람이 열어 볼 수 있는 로그가 요구였다. 그래프/DB는 수십~수백 편 규모에서 이득이 없다.
+- **진실의 원천은 디스크**, 레지스트리는 캐시: `sync()`가 출력 폴더 스캔 + src/ 스캔으로 매번 다시 만든다. 지워도 해시 계산 한 번으로 복구되고, 출력 폴더를 지우면 그 논문은 다시 `new`가 된다. 폴더를 옮기면 해시로 같은 논문임을 알아본다. 해시는 src/ 파일의 `size-mtime`이 바뀔 때만 다시 계산하고, 출력 폴더의 PDF는 한 번 계산한 뒤 재사용한다 (iCloud에서 내려받지 않은 PDF는 해시를 못 하므로, 처음 내려받기 전까지는 중복 검사에서 빠진다).
+- 쓰기는 임시 파일 + `os.replace`로 원자적. 서버와 CLI가 동시에 써도 반쪽 파일은 없고, 마지막 쓰기가 이긴다 (어차피 다시 만들 수 있는 캐시).
+
+### D3.5-3. prepare 동작 변경
+- PDF를 이동하지 않고 복사한다. src/는 읽기 전용 입력 폴더.
+- `-n` 없이: 출력 폴더가 없는 src/ PDF만 선택 (`max_papers`는 거른 뒤에 적용).
+- 같은 내용의 폴더가 있으면: digest PASS → `skip (already digested)`, exit 4 (`digest.sh`는 4를 "할 일 없음"으로 보고 0으로 끝냄). 폴더는 있는데 digest가 없거나 FAIL → 재추출 없이 `ready`(이어서). 이 덕분에 headless에서 `--force` 없이도 실패한 digest를 다시 돌릴 수 있다.
+- exit 3은 이제 "다른 PDF의 폴더가 같은 이름" (이름 충돌)만 뜻한다.
+
+### D3.5-4. 단계별 실행
+- `POST /api/papers/{id}/run {"action": all|digest|translation|highlights|figures}`가 `/annotate`를 대체한다. job은 스크립트 단계 목록이며 첫 실패에서 멈춘다. 논문당 동시에 1개 (action과 무관하게 기존 job을 돌려줌).
+- digest = `digest.sh -n <PDF>`, 주석 단계 = `annotate.sh -n <폴더> --only <part>`. all = (PASS가 아니면) digest → `annotate.sh -n` (`--only` 없음 → skill이 verify_annotations로 완료된 부분을 건너뜀). 새 논문은 아직 폴더가 없으므로 annotate 단계에 src/ PDF 경로를 넘기고, `papers.resolve_for_annotate`가 레지스트리로 폴더를 찾는다.
+- "핵심 추출"은 별도 단계로 나누지 않았다: evidence 추출은 digest의 앞부분이고 report/summary와 분리하면 skill 순서(증거 → 검증 → 작성)가 깨진다. 핵심 문장 선택은 Highlights 단계다.
+- 서버 검증: 새 논문에 주석 단계 → 409, digest PASS 논문에 digest → 409, 알 수 없는 action → 422.
+- 테스트용 `PAPER_VIEWER_ANNOTATE_CMD`는 `PAPER_VIEWER_JOB_CMD`로 바뀌었다 (stub 뒤에 스크립트 이름과 인자가 붙는다). src/는 `PAPER_VIEWER_SRC`로 바꿀 수 있다.
+
+### D3.5-5. 영어 UI, `target_lang`
+- UI 문자열은 영어만 (`i18n.ts`의 `t()`는 유지해 호출부는 그대로).
+- `configs/cfg.yaml` 최상위 `target_lang`(기본 `ko`). 적용 범위는 리더용 주석: `pNNN.<lang>.md`, figure_notes의 `#### <lang>`, highlights의 `note_<lang>`. 언어마다 파일이 따로라 언어를 바꿔도 기존 번역이 덮이지 않는다.
+- viewer.json은 언어 중립 키로 바꿨다: `figures[].note.tr`, `highlights[].note_tr`, 최상위 `lang`. golden 갱신.
+- 미번역 경고는 한글 검출 대신 "원문과 같음"으로 바꿔 모든 언어에서 동작한다. 해설 요약 줄 라벨은 `요약:`(한국어) 또는 `Summary:`.
+- digest 보고서(한국어 → 영어)는 범위 밖으로 남겼다. verify.py의 ko/en 구간 검사와 paper-digest skill을 함께 바꿔야 하는 별도 작업이다.

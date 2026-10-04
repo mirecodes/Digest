@@ -12,5 +12,7 @@ method / result / ablation / limitation are already highlighted — add H blocks
 - note_en: {one line in English: why it matters}
 ```
 
+`note_ko` is for target_lang `ko`; for another target language use `note_<lang>` (e.g. `note_ja`).
+
 verify_annotations.sh rejects a quote that is not on its page or cannot be anchored to the PDF, and warns when an
 H quote overlaps an evidence quote on the same page.

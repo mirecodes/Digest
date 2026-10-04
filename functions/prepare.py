@@ -1,10 +1,12 @@
-"""Select papers from src/, create their output folders, move the PDFs there and extract page-tagged text.
+"""Select papers from src/, create their output folders, copy the PDFs there and extract page-tagged text.
 
 Selection: `-n NAME` picks one paper (a path, or a src/ PDF matched by relative path, file name or stem);
-without it, every PDF under src/ is taken, at most `max_papers` (configs/cfg.yaml) per run.
+without it, every src/ PDF that has no output folder yet, at most `max_papers` (configs/cfg.yaml) per run.
+src/ is never modified. Papers are identified by content (functions/registry.py, <out_root>/.paper-registry.yaml),
+so a renamed or duplicated PDF is not processed twice.
 
 Layout: <out_root>/<path of the PDF relative to src/>/<Paper Name>/
-  <Paper Name>.pdf                                     (moved out of src/; copied if it lives elsewhere)
+  <Paper Name>.pdf                                     (a copy; the original stays where it is)
   <Paper Name> - report.md, <Paper Name> - summary.md   (written later)
   .work/pages.md, .work/captions.md, .work/evidence.md (hidden from Obsidian; evidence written later)
 
@@ -12,8 +14,10 @@ Layout: <out_root>/<path of the PDF relative to src/>/<Paper Name>/
 
 Usage (via wrapper): scripts/internal/prepare.sh [-n NAME] [--list] [--force] [--dry-run] [--offline]
 Each prepared paper prints `[prepare] ready: <folder>`; skipped ones print `[prepare] skip ...`.
+A PDF whose folder exists but whose digest is missing or failed is resumed: `ready` again, without re-extracting.
 Exit codes: 0 ok, 1 nothing selected / input error.
-  With -n only: 2 PDF looks scanned (needs OCR), 3 folder already exists.
+  With -n only: 2 PDF looks scanned (needs OCR), 3 another paper's folder has the same name,
+  4 already digested (verify PASS; --force redoes it).
 """
 import argparse
 import shutil
@@ -31,6 +35,7 @@ CFG_PATH = ROOT / "configs" / "cfg.yaml"
 SRC_DIR = ROOT / "src"
 DEFAULT_OUT = ROOT / "out"
 EXIT_EXISTS = 3
+EXIT_DONE = 4
 
 
 def load_config() -> dict:
@@ -69,40 +74,58 @@ def find_pdf(name: str, src: Path) -> list[Path]:
     return [p for p in src_pdfs(src) if name in (str(p.relative_to(src)), p.name, p.stem, str(p.relative_to(src).with_suffix("")))]
 
 
-def select(name: str | None, limit: int, src: Path) -> list[Path]:
+def select(name: str | None, limit: int, src: Path, done: set[str] = frozenset()) -> list[Path]:
+    """`-n NAME` matches; otherwise src/ PDFs whose relative path is not in `done` (already prepared), up to limit."""
     if name:
         return find_pdf(name, src)
-    pdfs = src_pdfs(src)
+    pdfs = [p for p in src_pdfs(src) if p.relative_to(src).as_posix() not in done]
     return pdfs[:limit] if limit > 0 else pdfs
 
 
-def prepare_one(pdf: Path, cfg: dict, args) -> int:
-    name, source = paper_name(pdf, cfg.get("title_words") or DEFAULT_TITLE_WORDS, args.offline)
-    dest = target_dir(pdf, name, out_root(cfg))
-    print(f"[prepare] {pdf.name} -> {name}   [{source}]")
+def prepare_one(pdf: Path, cfg: dict, args, papers: dict) -> int:
+    """`papers` is the registry (sha -> entry); it gets the new folder so a duplicate later in the run is caught."""
+    from functions.registry import pdf_sha     # registry imports this module
+    from functions.papers import digest_verify
+
+    root = out_root(cfg)
+    sha = pdf_sha(pdf)
+    known = papers.get(sha, {}).get("folder")
+    if known and (root / known).is_dir():
+        dest = root / known
+        if digest_verify(dest) == "PASS" and not args.force:
+            print(f"[prepare] skip (already digested, verify PASS): {dest}")
+            return EXIT_DONE
+        if (dest / WORK_DIR / "pages.md").is_file() and not args.force:
+            print(f"[prepare] {pdf.name} is already prepared; resuming")
+            print(f"[prepare] ready: {dest}")
+            return 0
+        name = dest.name
+        print(f"[prepare] {pdf.name} -> {name}   [registry]")
+    else:
+        name, source = paper_name(pdf, cfg.get("title_words") or DEFAULT_TITLE_WORDS, args.offline)
+        dest = target_dir(pdf, name, root)
+        print(f"[prepare] {pdf.name} -> {name}   [{source}]")
+        if dest.exists() and not args.force:
+            print(f"[prepare] skip (a folder of another PDF has this name; ask the user before using --force): {dest}")
+            return EXIT_EXISTS
     if args.dry_run:
         print(f"[prepare] folder: {dest}")
         return 0
 
     existed = dest.exists()
-    if existed and not args.force:
-        print(f"[prepare] skip (folder exists; ask the user before using --force): {dest}")
-        return EXIT_EXISTS
-
     stats = extract(pdf, dest / WORK_DIR)
     print(f"[extract] {stats['pages']} pages, {stats['chars']} chars, {stats['captions']} captions")
     if stats["scanned"]:
-        # Leave the PDF in src/ and drop the half-made folder so the paper can be retried after OCR.
+        # Drop the half-made folder so the paper can be retried after OCR.
         if not existed:
             shutil.rmtree(dest)
         print(f"[prepare] skip (PDF looks scanned; run OCR first): {pdf}")
         return EXIT_SCANNED
 
     pdf_out = dest / f"{name}.pdf"
-    if in_src(pdf):
-        shutil.move(pdf, pdf_out)
-    elif pdf.resolve() != pdf_out.resolve():
+    if pdf.resolve() != pdf_out.resolve():
         shutil.copy2(pdf, pdf_out)
+    papers.setdefault(sha, {"sources": {}})["folder"] = dest.relative_to(root).as_posix()
     print(f"[prepare] ready: {dest}")
     return 0
 
@@ -116,21 +139,36 @@ def main() -> int:
     parser.add_argument("--offline", action="store_true", help="skip arXiv/Crossref, use PDF metadata only")
     args = parser.parse_args()
 
+    from functions.registry import done_sources, sync
+
     cfg = load_config()
-    pdfs = select(args.name, int(cfg.get("max_papers") or 0), SRC_DIR)
+    root = out_root(cfg)
+    root.mkdir(parents=True, exist_ok=True)
+    papers, _ = sync(root)
+    pdfs = select(args.name, int(cfg.get("max_papers") or 0), SRC_DIR, done_sources(papers))
     if args.name and len(pdfs) > 1:
         print(f"[prepare] ERROR: '{args.name}' matches several PDFs: {[str(p) for p in pdfs]}", file=sys.stderr)
         return 1
     if not pdfs:
-        print(f"[prepare] ERROR: no PDF found{f' for {args.name!r}' if args.name else ' in src/'}", file=sys.stderr)
+        print(f"[prepare] ERROR: no PDF found{f' for {args.name!r}' if args.name else ' in src/ that is not prepared yet'}",
+              file=sys.stderr)
         return 1
 
     if args.list:
+        if args.name and not args.force:
+            from functions.papers import digest_verify
+            from functions.registry import pdf_sha
+            folder = papers.get(pdf_sha(pdfs[0]), {}).get("folder")
+            if folder and digest_verify(root / folder) == "PASS":
+                print(f"[prepare] skip (already digested, verify PASS): {root / folder}", file=sys.stderr)
+                return EXIT_DONE
         for p in pdfs:
             print(p.relative_to(SRC_DIR) if in_src(p) else p)
         return 0
 
-    codes = [prepare_one(p, cfg, args) for p in pdfs]
+    codes = [prepare_one(p, cfg, args, papers) for p in pdfs]
+    if not args.dry_run:
+        sync(root)
     if args.name:
         return codes[0]
     print(f"[prepare] {codes.count(0)}/{len(codes)} ready")

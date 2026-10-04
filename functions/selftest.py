@@ -4,6 +4,7 @@ Usage (via wrapper): scripts/internal/selftest.sh
 """
 import json
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -13,12 +14,13 @@ import pymupdf
 from functions.anchor import anchor_quote
 from functions.build_viewer import GOLDEN, build_viewer
 from functions.extract_pdf import extract
-from functions.fixtures import build_foonet, prepare_demo, write_annotations
+from functions.fixtures import build_foonet, build_long, prepare_demo, write_annotations
 from functions.verify_annotations import verify_annotations
 from functions.layout import build_layout
 from functions.paper_name import Meta, find_arxiv_id, format_name
 from functions.papers import paper_id, resolve_for_annotate, scan
-from functions.prepare import SRC_DIR, select, target_dir
+from functions.prepare import EXIT_DONE, SRC_DIR, prepare_one, select, target_dir
+from functions.registry import REGISTRY, done_sources, folder_for, library, sync
 from functions.verify import OUTPUT_KINDS, WORK_DIR, output_path, verify_paper
 
 GOOD_EVIDENCE = """### E1
@@ -263,18 +265,65 @@ def check_annotations(root: Path, failures: list) -> None:
             failures.append(f"verify_annotations bad case: expected warning containing {expected!r}")
 
 
-def check_server(root: Path, failures: list) -> None:
+def make_src(src: Path, paper: Path) -> None:
+    """src/ with a new paper (inbox/fresh.pdf) and a copy of an already prepared one (dup.pdf)."""
+    (src / "inbox").mkdir(parents=True, exist_ok=True)
+    build_long(src / "inbox" / "fresh.pdf", pages=2)
+    shutil.copy2(paper / "paper.pdf", src / "dup.pdf")
+
+
+def check_registry(root: Path, paper: Path, src: Path, failures: list) -> None:
+    papers, _ = sync(root, src)
+    by_folder = {p["folder"]: p for p in papers.values()}
+    demo = by_folder.get(paper.name, {})
+    if len(papers) != 2 or demo.get("sources", {}).keys() != {"dup.pdf"} or None not in by_folder:
+        failures.append(f"registry: expected the demo (with src dup.pdf) and one new paper, got {papers}")
+    if not (root / REGISTRY).is_file():
+        failures.append("registry: file not written")
+    if [p.name for p in select(None, 0, src, done_sources(papers))] != ["fresh.pdf"]:
+        failures.append("registry: selection should skip the already prepared dup.pdf")
+    if folder_for(src / "dup.pdf", root, src) != root / paper.name:
+        failures.append("registry: folder_for(dup.pdf) should find the demo folder")
+    if sorted(e.status for e in library(root, src)) != ["new", "ok"]:
+        failures.append("registry: library should list the demo and one new paper")
+
+    # prepare copies (src/ stays as it is), then resumes instead of redoing, and stops once the digest passed
+    import contextlib
+    import io
+    from argparse import Namespace
+    args = Namespace(force=False, dry_run=False, offline=True)
+    cfg = {"out_dir": str(root)}
+    fresh = src / "inbox" / "fresh.pdf"
+    with contextlib.redirect_stdout(io.StringIO()) as out:
+        codes = [prepare_one(fresh, cfg, args, papers)]
+        made = folder_for(fresh, root, src)
+        codes.append(prepare_one(fresh, cfg, args, sync(root, src)[0]))
+        if made:
+            output_path(made, "report").write_text("> verify: PASS\n", encoding="utf-8")
+        codes.append(prepare_one(fresh, cfg, args, sync(root, src)[0]))
+    if not fresh.is_file() or made is None or codes != [0, 0, EXIT_DONE] or "resuming" not in out.getvalue():
+        failures.append(f"prepare: expected copy, resume, already-digested; got codes {codes}, folder {made}, "
+                        f"src kept {fresh.is_file()}")
+    elif made:
+        shutil.rmtree(made)     # leave the tree as the server check expects it
+        sync(root, src)
+
+
+def check_server(root: Path, src: Path, failures: list) -> None:
     os.environ["PAPER_VIEWER_OUT"] = str(root)
+    os.environ["PAPER_VIEWER_SRC"] = str(src)
     os.environ["PAPER_VIEWER_LLM"] = "fake"
     from fastapi.testclient import TestClient
     from functions.viewer.server import app
 
     client = TestClient(app)
     papers = client.get("/api/papers").json()
-    if len(papers) != 1:
-        failures.append(f"server: /api/papers should list 1 paper, got {papers}")
+    ready = [p for p in papers if p["status"] == "ok"]
+    new = [p for p in papers if p["status"] == "new"]
+    if len(ready) != 1 or len(new) != 1:
+        failures.append(f"server: /api/papers should list 1 prepared and 1 new paper, got {papers}")
         return
-    api = f"/api/papers/{papers[0]['id']}"
+    api = f"/api/papers/{ready[0]['id']}"
     data = client.get(f"{api}/viewer.json").json()
     if data.get("paper", {}).get("num_pages") != 3 or not data.get("blocks") or len(data.get("figures", [])) != 3:
         failures.append("server: viewer.json is incomplete")
@@ -295,12 +344,27 @@ def check_server(root: Path, failures: list) -> None:
         if got != want:
             failures.append(f"server: {name}: expected {want}, got {got}")
 
-    # preprocessing job with a stub command instead of scripts/annotate.sh (no Claude call)
-    os.environ["PAPER_VIEWER_ANNOTATE_CMD"] = f'"{sys.executable}" -c "import sys; print(\'stub annotate\', sys.argv[1])"'
-    job = client.post(f"{api}/annotate").json()
-    events = client.get(f"/api/jobs/{job.get('job_id')}/events").text
-    if "stub annotate" not in events or 'event: done\ndata: {"status": "done", "returncode": 0}' not in events:
-        failures.append(f"server: annotate job stream unexpected: {events[:300]!r}")
+    # processing jobs with a stub instead of the scripts (no Claude call); it echoes the script and its arguments
+    os.environ["PAPER_VIEWER_JOB_CMD"] = f'"{sys.executable}" -c "import sys; print(\'stub\', *sys.argv[1:])"'
+    new_api = f"/api/papers/{new[0]['id']}"
+    run = lambda url, action: client.post(f"{url}/run", json={"action": action})
+    cases = [
+        (run(new_api, "translation").status_code, 409, "annotate part on a new paper"),
+        (run(api, "everything").status_code, 422, "unknown action"),
+        (client.get(f"{new_api}/pdf").status_code, 409, "pdf of a new paper"),
+    ]
+    for got, want, name in cases:
+        if got != want:
+            failures.append(f"server: {name}: expected {want}, got {got}")
+    for url, action, expected in [
+        (new_api, "all", ["stub digest.sh -n " + str(src / "inbox" / "fresh.pdf"), "stub annotate.sh -n "]),
+        (api, "figures", [f"stub annotate.sh -n {root / 'Demo (2024)'} --only figures"]),
+    ]:
+        job = run(url, action).json()
+        events = client.get(f"/api/jobs/{job.get('job_id')}/events").text
+        if any(e not in events for e in expected) or \
+                'event: done\ndata: {"status": "done", "returncode": 0}' not in events:
+            failures.append(f"server: {action} job stream unexpected: {events[:400]!r}")
     if client.get("/api/jobs/nope/events").status_code != 404:
         failures.append("server: unknown job should be 404")
 
@@ -310,7 +374,8 @@ def main() -> int:
     check_naming(failures)
     check_selection(failures)
     with tempfile.TemporaryDirectory() as tmp:
-        paper, truth = build_paper(Path(tmp))
+        tmp = Path(tmp).resolve()   # macOS: /var -> /private/var; the registry and server report resolved paths
+        paper, truth = build_paper(tmp)
 
         stats = extract(paper / "paper.pdf", paper / WORK_DIR)
         if stats["pages"] != 3 or stats["scanned"]:
@@ -333,7 +398,9 @@ def main() -> int:
         check_layout(paper, truth, failures)
         check_anchor(paper / "paper.pdf", truth, failures)
         check_papers(Path(tmp) / "out", paper, failures)
-        check_server(Path(tmp) / "out", failures)
+        make_src(Path(tmp) / "src", paper)
+        check_registry(Path(tmp) / "out", paper, Path(tmp) / "src", failures)
+        check_server(Path(tmp) / "out", Path(tmp) / "src", failures)
         check_annotations(Path(tmp), failures)
 
     for f in failures:

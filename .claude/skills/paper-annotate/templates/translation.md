@@ -1,6 +1,6 @@
-# Translation template (`.work/translate/pNNN.ko.md`)
+# Translation template (`.work/translate/pNNN.<lang>.md`)
 
-Copy every `<!-- BLOCK id -->` marker from `pNNN.src.md` in the same order (the `kind=` attribute may be dropped)
+`<lang>` is target_lang (printed by layout.sh); the example below is for `ko`. Copy every `<!-- BLOCK id -->` marker from `pNNN.src.md` in the same order (the `kind=` attribute may be dropped)
 and put the translation under it. verify_annotations.sh parses the markers, so keep them exactly.
 
 Source (`p003.src.md`):

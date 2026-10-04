@@ -30,7 +30,7 @@ export interface Block {
 export interface FigureNote {
   status: "OK" | "SKIP";
   reason?: string;
-  ko?: { summary: string; body_md: string };
+  tr?: { summary: string; body_md: string }; // target language (ViewerData.lang)
   en?: { summary: string; body_md: string };
 }
 
@@ -55,7 +55,7 @@ export interface Highlight {
   page: number;
   rects: Rect[];
   quote: string;
-  note_ko: string | null;
+  note_tr: string | null;
   note_en: string | null;
 }
 
@@ -69,6 +69,7 @@ export interface OutlineItem {
 export interface ViewerData {
   version: 1;
   built_at: string;
+  lang: string; // target_lang of translations and notes (configs/cfg.yaml)
   paper: {
     id: string;
     name: string;
@@ -108,5 +109,8 @@ export interface PaperEntry {
   translation: { done: number; total: number };
   highlights: number;
   figure_notes: { done: number; total: number };
-  status: "ok" | "evicted";
+  status: "ok" | "evicted" | "new"; // new: a src/ PDF that is not prepared yet
+  source: string | null;
 }
+
+export type Action = "all" | "digest" | "translation" | "highlights" | "figures";

@@ -8,7 +8,7 @@ argument-hint: [-n NAME]
 
 Input: `$ARGUMENTS`
 - `-n NAME`: one paper (a src/ relative path, file name or stem, or a PDF path). A bare name or path without `-n` means the same.
-- empty: every PDF in `src/`, at most `max_papers` (configs/cfg.yaml) per run.
+- empty: every PDF in `src/` that has no output folder yet, at most `max_papers` (configs/cfg.yaml) per run.
 
 Core principle: **evidence first, writing second.** Collect evidence from the source text,
 verify it with a script, then write the report from verified evidence only. Never change this order.
@@ -20,11 +20,14 @@ Never call the system `python` directly. If a script reports that `.venv` is mis
 
 ### 1. Prepare
 1. Run `scripts/internal/prepare.sh` (with `-n "NAME"` if given). For each paper it picks the name
-   `Short Title (Year)` from arXiv/Crossref/PDF metadata, creates the folder, moves the PDF out of `src/`,
-   and prints `[prepare] ready: <folder>`. Paths contain spaces: always quote them.
-   - `skip (folder exists ...)` / exit 3: ask the user before re-running that paper with `-n "NAME" --force`.
-     In a non-interactive run (`claude -p`), do not use `--force`; just report it.
-   - `skip (PDF looks scanned ...)` / exit 2: the PDF stays in `src/`; tell the user OCR is needed.
+   `Short Title (Year)` from arXiv/Crossref/PDF metadata, creates the folder, copies the PDF there (`src/` is
+   never changed), and prints `[prepare] ready: <folder>`. Paths contain spaces: always quote them.
+   Papers are recognised by content (`<out_dir>/.paper-registry.yaml`), so the same PDF is never prepared twice;
+   a prepared paper whose digest is missing or failed comes back as `ready` (resumed) without re-extraction.
+   - `skip (already digested ...)` / exit 4: nothing to do for that paper; report it.
+   - `skip (a folder of another PDF has this name ...)` / exit 3: ask the user before re-running that paper with
+     `-n "NAME" --force`. In a non-interactive run (`claude -p`), do not use `--force`; just report it.
+   - `skip (PDF looks scanned ...)` / exit 2: tell the user OCR is needed.
    - Exit 1: nothing to process; tell the user and stop.
 2. Run steps 2-8 for each `ready` folder, one paper at a time, finishing one before starting the next.
    Below, `<paper>` means that folder and `<name>` its folder name.

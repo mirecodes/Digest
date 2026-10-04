@@ -3,24 +3,29 @@
 Binds to 127.0.0.1 only (scripts/viewer.sh). Files are served only from paper folders found by scanning the
 output root; paths that resolve outside their paper folder are refused. API: docs/viewer-plan.md §9.
 
-Environment: PAPER_VIEWER_OUT overrides the output root (tests use a temporary one).
+Environment: PAPER_VIEWER_OUT and PAPER_VIEWER_SRC override the output root and src/ (tests use temporary ones).
 """
 import hashlib
 import json
+import os
 import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 import pymupdf
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from functions.build_viewer import ensure_viewer, viewer_root
-from functions.papers import find_pdf, is_evicted, scan, viewer_cfg
+from functions.papers import PaperEntry, find_pdf, is_evicted, viewer_cfg
+from functions.prepare import SRC_DIR
+from functions.registry import library
 from functions.verify import WORK_DIR
-from functions.viewer.jobs import JOBS
+from functions.viewer.jobs import JOBS, Step
 
 DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
 PDFJS = Path(__file__).resolve().parents[2] / "web" / "node_modules" / "pdfjs-dist"
@@ -38,7 +43,7 @@ async def _lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Paper Viewer", docs_url=None, redoc_url=None, lifespan=_lifespan)
-_papers: dict[str, Path] = {}
+_papers: dict[str, PaperEntry] = {}
 
 
 @app.exception_handler(HTTPException)
@@ -46,19 +51,31 @@ async def _error(_: Request, exc: HTTPException):
     return JSONResponse({"error": exc.detail, "detail": None}, status_code=exc.status_code)
 
 
-def _rescan() -> list:
-    entries = scan(viewer_root())
+def viewer_src() -> Path:
+    return Path(os.environ.get("PAPER_VIEWER_SRC") or SRC_DIR).resolve()
+
+
+def _rescan() -> list[PaperEntry]:
+    """Output folders and new src/ PDFs, via the registry (which this also brings up to date)."""
+    entries = library(viewer_root(), viewer_src())
     _papers.clear()
-    _papers.update({e.id: Path(e.folder) for e in entries})
+    _papers.update({e.id: e for e in entries})
     return entries
 
 
-def _folder(pid: str) -> Path:
+def _entry(pid: str) -> PaperEntry:
     if pid not in _papers:
         _rescan()
     if pid not in _papers:
         raise HTTPException(404, "unknown paper")
-    folder = _papers[pid]
+    return _papers[pid]
+
+
+def _folder(pid: str) -> Path:
+    e = _entry(pid)
+    if e.status == "new":
+        raise HTTPException(409, "the paper is not prepared yet; run the summary first")
+    folder = Path(e.folder)
     if is_evicted(folder):
         raise HTTPException(409, "the PDF is not downloaded from iCloud (evicted)")
     return folder
@@ -128,10 +145,36 @@ def crop(pid: str, page: int, bbox: str, dpi: int = 200):
     return FileResponse(out, media_type="image/png")
 
 
-@app.post("/api/papers/{pid}/annotate")
-def annotate(pid: str):
-    job = JOBS.submit(_folder(pid))
-    return {"job_id": job.id, "status": job.status}
+ANNOTATE_PARTS = ("translation", "highlights", "figures")
+
+
+class RunRequest(BaseModel):
+    action: Literal["all", "digest", "translation", "highlights", "figures"]
+
+
+def _steps(e: PaperEntry, action: str) -> list[Step]:
+    """all: summary (unless it passed) then every missing annotation part; otherwise the one script it names."""
+    if action in ANNOTATE_PARTS:
+        return [("annotate.sh", ["-n", e.folder, "--only", action])]
+    digest = ("digest.sh", ["-n", e.source or str(find_pdf(Path(e.folder)))])
+    if action == "digest":
+        return [digest]
+    # a new paper has no folder yet: annotate.sh finds the one the digest made from the PDF (via the registry)
+    return ([digest] if e.digest_verify != "PASS" else []) + [("annotate.sh", ["-n", e.folder or e.source])]
+
+
+@app.post("/api/papers/{pid}/run")
+def run(pid: str, req: RunRequest):
+    e = _entry(pid)
+    if e.status != "new":
+        _folder(pid)            # refuses evicted papers
+    if req.action in ANNOTATE_PARTS and e.status == "new":
+        raise HTTPException(409, "the paper is not prepared yet; run the summary first")
+    if req.action == "digest" and e.digest_verify == "PASS":
+        raise HTTPException(409, "the summary is already done (verify PASS)")
+    log_dir = Path(e.folder) / WORK_DIR / "viewer" / "jobs" if e.folder else viewer_root() / ".paper-jobs"
+    job = JOBS.submit(pid, req.action, _steps(e, req.action), log_dir)
+    return {"job_id": job.id, "status": job.status, "action": job.action}
 
 
 def _sse(event: str, data: dict) -> str:

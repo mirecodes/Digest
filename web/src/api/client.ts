@@ -1,19 +1,28 @@
-import type { PaperEntry, ViewerData } from "../types";
+import { t } from "../i18n";
+import type { Action, PaperEntry, ViewerData } from "../types";
+
+async function errorOf(res: Response): Promise<Error> {
+  // 405: a server started before this route existed answers through the GET-only SPA catch-all
+  if (res.status === 405) return new Error(t("server_outdated"));
+  const body = await res.json().catch(() => ({}));
+  return new Error(body.error ?? `${res.status} ${res.statusText}`);
+}
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `${res.status} ${res.statusText}`);
-  }
+  if (!res.ok) throw await errorOf(res);
   return res.json();
 }
 
 export const listPapers = () => getJson<PaperEntry[]>("/api/papers");
 export const loadViewer = (id: string) => getJson<ViewerData>(`/api/papers/${id}/viewer.json`);
-export async function startAnnotate(id: string): Promise<{ job_id: string; status: string }> {
-  const res = await fetch(`/api/papers/${id}/annotate`, { method: "POST" });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
+export async function startJob(id: string, action: Action): Promise<{ job_id: string; status: string; action: Action }> {
+  const res = await fetch(`/api/papers/${id}/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action }),
+  });
+  if (!res.ok) throw await errorOf(res);
   return res.json();
 }
 export const jobEventsUrl = (jobId: string) => `/api/jobs/${jobId}/events`;

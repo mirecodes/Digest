@@ -1,7 +1,8 @@
 # Figure notes template (`.work/figure_notes.md`)
 
-One F block per entry of `.work/layout/figures.json` (figures and tables). Korean first, then English.
-The first line of each language section (`요약:` / `Summary:`) is the hover popover headline (Korean ≤ 120 chars).
+One F block per entry of `.work/layout/figures.json` (figures and tables). Target language first (`#### <lang>`,
+the code layout.sh prints; shown here for `ko`), then English (`#### en`). The first line of each section is the
+hover popover headline (≤ 120 chars), labelled `요약:` in Korean and `Summary:` in every other language.
 
 ```
 ### F{n}

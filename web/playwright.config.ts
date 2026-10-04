@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
-// Started by scripts/internal/viewer_test.sh --e2e, which prepares a fixture output root and exports
-// PAPER_VIEWER_OUT, PY (the .venv interpreter) and ROOT (the project root).
+// Started by scripts/internal/viewer_test.sh --e2e, which prepares a fixture output root and src/ and exports
+// PAPER_VIEWER_OUT, PAPER_VIEWER_SRC, PY (the .venv interpreter) and ROOT (the project root).
 const port = 8799;
 
 export default defineConfig({
@@ -16,10 +16,11 @@ export default defineConfig({
     reuseExistingServer: false,
     env: {
       PAPER_VIEWER_OUT: process.env.PAPER_VIEWER_OUT ?? "",
+      PAPER_VIEWER_SRC: process.env.PAPER_VIEWER_SRC ?? "",
       PAPER_VIEWER_LLM: "fake",
       PYTHONPATH: process.env.ROOT ?? "",
-      // stub for scripts/annotate.sh: prints a few lines, no Claude call
-      PAPER_VIEWER_ANNOTATE_CMD: `"${process.env.PY}" -c "import sys, time; print('stub annotate', sys.argv[1]); time.sleep(0.5); print('finished')"`,
+      // stub for scripts/digest.sh and annotate.sh: echoes the script and its arguments, no Claude call
+      PAPER_VIEWER_JOB_CMD: `"${process.env.PY}" -c "import sys, time; print('stub', *sys.argv[1:]); time.sleep(0.5); print('finished')"`,
     },
   },
 });

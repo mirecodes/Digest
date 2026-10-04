@@ -1,6 +1,7 @@
 """Verify the viewer's pre-generated annotations (docs/viewer-plan.md §5.5).
 
-  translation   .work/translate/pNNN.ko.md against pNNN.src.md (pages without a .ko.md are just not done yet)
+  translation   .work/translate/pNNN.<lang>.md against pNNN.src.md (pages without one are just not done yet);
+                <lang> is target_lang from configs/cfg.yaml
   highlights    evidence-derived highlights + .work/highlights.md H blocks: verbatim on their page and anchorable
   figures       .work/figure_notes.md: one F block per figure in layout/figures.json, valid citation markers
 
@@ -22,44 +23,43 @@ from functions.anchor import anchor_quote
 from functions.annotations import (EVIDENCE_TO_HIGHLIGHT, HIGHLIGHT_CATEGORIES, parse_evidence, parse_figure_notes,
                                    parse_highlights, parse_src, parse_translation, read)
 from functions.layout import build_layout
-from functions.papers import find_pdf
+from functions.papers import find_pdf, target_lang, tr_files
 from functions.textmatch import find_quote_pages, load_pages, loose
 from functions.verify import CALC_RE, CITE_RE, EXEMPT_TAGS, NUMBER_RE, WORK_DIR
 
 PARTS = ("translation", "highlights", "figures")
 TR_NUMBER_RE = re.compile(r"\d+\.\d+\s*%?|\d+\s*%|\d+(?:\.\d+)?\s*×")   # decimals, percentages, multipliers
 REF_NUM_RE = re.compile(r"\[\d+(?:\s*[,–-]\s*\d+)*\]")
-HANGUL_RE = re.compile(r"[가-힣]")
 FIG_RE = re.compile(r"\[FIG:\s*([^\]\s]+)\s*\]")
 LENGTH_RATIO = (0.25, 3.0)
 DENSITY = {"min": 15, "max": 40, "per_page_factor": 1.5, "per_page_max": 4}
-SUMMARY_MAX_KO = 120
+SUMMARY_MAX = 120   # characters of the target-language popover headline
 
 
 def _numbers(text: str, pattern: re.Pattern) -> set[str]:
     return {re.sub(r"\s+", "", m) for m in pattern.findall(text)}
 
 
-def check_translation(work: Path, errors: list, warnings: list) -> dict:
+def check_translation(work: Path, lang: str, errors: list, warnings: list) -> dict:
     done = total = 0
     for src in sorted((work / "translate").glob("p*.src.md")):
         blocks = parse_src(src.read_text(encoding="utf-8"))
         total += len(blocks)
-        ko_path = src.with_name(src.name.replace(".src.md", ".ko.md"))
-        if not ko_path.is_file():
+        tr_path = src.with_name(src.name.replace(".src.md", f".{lang}.md"))
+        if not tr_path.is_file():
             continue
-        ko = parse_translation(ko_path.read_text(encoding="utf-8"))
-        name = ko_path.name
-        for bid in sorted(ko.keys() - {b[0] for b in blocks}):
+        translated = parse_translation(tr_path.read_text(encoding="utf-8"))
+        name = tr_path.name
+        for bid in sorted(translated.keys() - {b[0] for b in blocks}):
             errors.append(f"{name}: unknown block {bid} (not in {src.name})")
         for bid, kind, text in blocks:
-            tr = ko.get(bid, "")
+            tr = translated.get(bid, "")
             if not tr:
                 errors.append(f"{name}: missing translation for {bid}")
                 continue
             done += 1
-            if kind == "paragraph" and not HANGUL_RE.search(tr):
-                warnings.append(f"{name}: {bid} has no Korean text (untranslated?)")
+            if kind == "paragraph" and lang != "en" and loose(tr) == loose(text):
+                warnings.append(f"{name}: {bid} is the same as the source (untranslated?)")
             missing = _numbers(text, TR_NUMBER_RE) - _numbers(tr, TR_NUMBER_RE)
             if missing:
                 warnings.append(f"{name}: {bid} drops numbers {sorted(missing)}")
@@ -76,7 +76,7 @@ def _anchor(doc, page: int, quote: str):
     return anchor_quote(doc[page - 1], quote) if 1 <= page <= len(doc) else None
 
 
-def check_highlights(work: Path, doc, pages: dict, evidence: dict, errors: list, warnings: list) -> list[dict]:
+def check_highlights(work: Path, doc, pages: dict, evidence: dict, lang: str, errors: list, warnings: list) -> list[dict]:
     """Anchored highlights for the bundle: evidence-derived first, then H blocks."""
     items = []
     for eid, e in evidence.items():
@@ -90,12 +90,12 @@ def check_highlights(work: Path, doc, pages: dict, evidence: dict, errors: list,
         if a["ambiguous"]:
             warnings.append(f"{eid}: quote occurs more than once on p.{e['page']}; the first match is highlighted")
         items.append({"id": eid, "source": "evidence", "category": cat, "page": e["page"], "rects": a["rects"],
-                      "quote": e["quote"], "note_ko": e["note"], "note_en": None})
+                      "quote": e["quote"], "note_tr": e["note"], "note_en": None})
 
     md = read(work / "highlights.md")
     if md is None:
         return items
-    for h in parse_highlights(md):
+    for h in parse_highlights(md, lang):
         hid = h["id"]
         if h["category"] not in HIGHLIGHT_CATEGORIES:
             errors.append(f"{hid}: category {h['category']!r} is not one of {', '.join(HIGHLIGHT_CATEGORIES)}")
@@ -120,7 +120,7 @@ def check_highlights(work: Path, doc, pages: dict, evidence: dict, errors: list,
             if item["source"] == "evidence" and item["page"] == h["page"] and (q in other or other in q):
                 warnings.append(f"{hid}: duplicates evidence {item['id']} (evidence quotes are highlighted automatically)")
         items.append({"id": hid, "source": "highlight", "category": h["category"], "page": h["page"], "rects": a["rects"],
-                      "quote": h["quote"], "note_ko": h["note_ko"], "note_en": h["note_en"]})
+                      "quote": h["quote"], "note_tr": h["note_tr"], "note_en": h["note_en"]})
 
     n_pages = len(doc)
     limit = int(min(DENSITY["max"], DENSITY["per_page_factor"] * n_pages))
@@ -153,14 +153,15 @@ def _check_note_text(label: str, text: str, evidence: dict, fig_ids: set, errors
             warnings.append(f"{label}: number without a marker -> {line.strip()[:90]}")
 
 
-def check_figure_notes(work: Path, figures: list[dict], evidence: dict, errors: list, warnings: list) -> dict[str, dict]:
+def check_figure_notes(work: Path, figures: list[dict], evidence: dict, lang: str, errors: list,
+                       warnings: list) -> dict[str, dict]:
     """{figure id: note} for valid F blocks."""
     md = read(work / "figure_notes.md")
     if md is None:
         return {}
     fig_ids = {f["id"] for f in figures}
     by_fig = {}
-    for n in parse_figure_notes(md):
+    for n in parse_figure_notes(md, lang):
         label = f"{n['id']} ({n['figure']})"
         if n["figure"] not in fig_ids:
             errors.append(f"{n['id']}: figure {n['figure']!r} is not in layout/figures.json")
@@ -175,19 +176,19 @@ def check_figure_notes(work: Path, figures: list[dict], evidence: dict, errors: 
             if not n["reason"]:
                 warnings.append(f"{label}: SKIP without a reason")
         else:
-            if not n["ko"]:
-                errors.append(f"{label}: status OK but no '#### ko' section")
+            if not n["tr"]:
+                errors.append(f"{label}: status OK but no '#### {lang}' section")
                 continue
             if not n["en"]:
                 warnings.append(f"{label}: no '#### en' section")
-            if not n["ko"]["summary"]:
-                warnings.append(f"{label}: no '요약:' line (popover headline)")
-            elif len(n["ko"]["summary"]) > SUMMARY_MAX_KO:
-                warnings.append(f"{label}: Korean summary is {len(n['ko']['summary'])} chars (max {SUMMARY_MAX_KO})")
-            for lang in ("ko", "en"):
-                if n[lang]:
-                    text = f"{n[lang]['summary']}\n{n[lang]['body_md']}"
-                    _check_note_text(f"{label} {lang}", text, evidence, fig_ids, errors, warnings)
+            if not n["tr"]["summary"]:
+                warnings.append(f"{label}: no summary line in '#### {lang}' (popover headline)")
+            elif len(n["tr"]["summary"]) > SUMMARY_MAX:
+                warnings.append(f"{label}: {lang} summary is {len(n['tr']['summary'])} chars (max {SUMMARY_MAX})")
+            for key in ("tr", "en"):
+                if n[key]:
+                    text = f"{n[key]['summary']}\n{n[key]['body_md']}"
+                    _check_note_text(f"{label} {lang if key == 'tr' else 'en'}", text, evidence, fig_ids, errors, warnings)
         by_fig[n["figure"]] = n
     for f in figures:
         if f["id"] not in by_fig:
@@ -200,19 +201,20 @@ def verify_annotations(paper_dir: Path, parts=PARTS) -> dict:
     paper_dir = paper_dir.resolve()
     build_layout(paper_dir)
     work = paper_dir / WORK_DIR
+    lang = target_lang()
     errors, warnings = [], []
     evidence = parse_evidence(read(work / "evidence.md") or "")
     figures = json.loads((work / "layout" / "figures.json").read_text(encoding="utf-8"))["figures"]
     result = {"errors": errors, "warnings": warnings, "evidence": evidence, "translation": None, "highlights": [],
-              "notes": {}, "figures": figures}
+              "notes": {}, "figures": figures, "lang": lang}
     if "translation" in parts:
-        result["translation"] = check_translation(work, errors, warnings)
+        result["translation"] = check_translation(work, lang, errors, warnings)
     if "highlights" in parts:
         doc = pymupdf.open(find_pdf(paper_dir))
-        result["highlights"] = check_highlights(work, doc, load_pages(work / "pages.md"), evidence, errors, warnings)
+        result["highlights"] = check_highlights(work, doc, load_pages(work / "pages.md"), evidence, lang, errors, warnings)
     if "figures" in parts:
-        result["notes"] = check_figure_notes(work, figures, evidence, errors, warnings)
-    result["present"] = any((work / "translate").glob("p*.ko.md")) or (work / "highlights.md").is_file() \
+        result["notes"] = check_figure_notes(work, figures, evidence, lang, errors, warnings)
+    result["present"] = bool(tr_files(work, lang)) or (work / "highlights.md").is_file() \
         or (work / "figure_notes.md").is_file()
     return result
 

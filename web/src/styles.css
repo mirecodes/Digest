@@ -104,6 +104,20 @@ input:focus { outline: 2px solid var(--accent); outline-offset: 0; background: v
   background: var(--surface); color: var(--text-secondary); font: 12px/1.6 "JetBrains Mono", "SF Mono", ui-monospace, monospace;
   white-space: pre-wrap;
 }
+/* process dropdown: a popover list of actions, done ones carry a check */
+.menu-wrap { position: relative; }
+.menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 220px; padding: 6px;
+  display: flex; flex-direction: column; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-card); box-shadow: var(--shadow-pop);
+}
+.menu button {
+  justify-content: space-between; width: 100%; padding: 10px 12px; font-weight: 400;
+  background: transparent; color: var(--text);
+}
+.menu button:hover:not(:disabled) { background: var(--surface); }
+.menu button:first-child { font-weight: 600; color: var(--accent-hover); }
+.menu .done { color: var(--success); }
 .paper-list .info { flex: 1; min-width: 0; }
 .paper-list .name { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 6px; overflow-wrap: anywhere; }
 .paper-list .meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--text-muted); font-size: 13px; }

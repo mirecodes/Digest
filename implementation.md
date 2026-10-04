@@ -88,12 +88,14 @@ Obsidian 검색에서 노트 이름이 겹치지 않게 하기 위함이다.
 | 키 | 의미 | 기본 |
 |---|---|---|
 | `out_dir` | 출력 루트. 절대경로, `~`, 프로젝트 기준 상대경로 모두 가능 | 비어 있으면 `<project>/out` |
+| `target_lang` | 리더 번역·피규어 해설·하이라이트 메모의 언어 (ISO 639-1). 파일이 언어별로 따로 저장됨 (`pNNN.<lang>.md`) | `ko` |
 | `title_words` | 긴 제목에서 남길 단어 수 (stopword 제외) | 5 |
 | `max_papers` | `-n` 없이 실행할 때 한 번에 처리할 최대 논문 수. 0/빈 값 = 무제한 | — |
 
 현재 `out_dir`은 iCloud의 Obsidian vault(`Uru Vault/Paper Digest`)를 가리킨다.
+digest 보고서/요약은 `target_lang`과 무관하게 한국어 → 영어 그대로다 (verify.py의 ko/en 구간 검사).
 
-`viewer:` 하위 키(host, port, target_lang, llm_backend, model_*, auto_annotate 등)는
+`viewer:` 하위 키(host, port, llm_backend, model_*, auto_annotate 등)는
 `docs/viewer-plan.md` §11 참고. 키가 없어도 기본값으로 동작한다.
 
 ---
@@ -104,7 +106,7 @@ Obsidian 검색에서 노트 이름이 겹치지 않게 하기 위함이다.
 src/*.pdf
    │  scripts/digest.sh  (또는 Claude Code에서 /paper-digest)
    ▼
-[1] Prepare        prepare.sh → 이름 결정 → 폴더 생성 → 추출 → PDF 이동      (Python)
+[1] Prepare        prepare.sh → 레지스트리로 중복 확인 → 이름 결정 → 폴더 생성 → 추출 → PDF 복사 (src/는 그대로)  (Python)
 [2] Read           .work/pages.md 전체를 처음부터 끝까지 읽음                 (Claude)
 [3] Evidence       .work/evidence.md 작성 (원문 그대로 인용)                  (Claude)
 [4] Verify E       verify.sh --evidence-only, ERROR 0개까지 수정             (Python ↔ Claude)
@@ -118,7 +120,7 @@ src/*.pdf
 
 ```
 [A1] Layout        layout.sh → blocks.json, figures.json, figure crops, translate/*.src.md   (Python)
-[A2] Translate     glossary.md → 페이지별 pNNN.ko.md                                        (Claude)
+[A2] Translate     glossary.md → 페이지별 pNNN.<target_lang>.md                             (Claude)
 [A3] Highlights    highlights.md (evidence가 못 다룬 핵심 문장만)                            (Claude)
 [A4] Figure notes  피규어 PNG를 보고 figure_notes.md (한→영)                                (Claude)
 [A5] Verify        verify_annotations.sh, ERROR 수정 (최대 3회)                             (Python ↔ Claude)
@@ -399,6 +401,7 @@ scripts/internal/viewer_test.sh [--e2e]
 | 1 | layout (블록·단·읽기 순서·피규어 영역), anchor | done |
 | 2 | FastAPI 서버, 라이브러리, 2-pane 리더, **페이지 싱크 스크롤**, 블록 링크 | done |
 | 3 | `/paper-annotate` skill, verify_annotations, viewer.json 번들, 전처리 job | done |
+| 3.5 | 논문 레지스트리(중복 방지, src/ 보존), 단계별 실행 드롭다운, 영어 UI, `target_lang` | done |
 | 4 | 자동 하이라이트 레이어, **피규어 호버 해설 popover**, bbox 수정 | planned |
 | 5 | LLM 백엔드, 선택/영역 설명, 선택·페이지 번역, 채팅, grounding 배지 | planned |
 | 6 | 사용자 하이라이트·메모, notes.md / annotated.pdf 내보내기 | planned |
@@ -439,4 +442,16 @@ scripts/internal/viewer_test.sh [--e2e]
 - 새 명령: `scripts/internal/verify_annotations.sh "<폴더>" [--translation] [--highlights] [--figures]`, `scripts/internal/build_viewer.sh --update-golden`.
 - `scripts/internal/layout.sh`는 폴더 이름도 받는다. `viewer.auto_annotate: true`면 `digest.sh`가 끝에 `annotate.sh`를 실행.
 - 테스트: selftest(+ verify_annotations good/bad, golden 번들, job SSE) / vitest 16 / Playwright 7 (전처리 버튼 stub, 번역 표시 추가).
+
+**Phase 3.5 — 논문 관리 재구성** (decisions.md D3.5-*)
+- `src/`는 더 이상 비워지지 않는다. prepare가 PDF를 출력 폴더로 **복사**한다.
+- 레지스트리 `<out_dir>/.paper-registry.yaml` (`functions/registry.py`): PDF 내용 해시(SHA-256 앞 16자)를 키로 src/ 경로·출력 폴더·상태(new/prepared/digested/annotated)·digest·번역·하이라이트·해설 수를 한 파일에 기록. 디스크에서 다시 만들 수 있는 캐시라 지워도 된다. `python -m functions.registry`(스크립트 경유)로 표 출력.
+  - `digest.sh`(인자 없음)는 출력 폴더가 없는 src/ PDF만 처리. 같은 PDF가 이름만 바뀌어도 건너뜀.
+  - prepare: 이미 digest PASS → `skip (already digested)`, exit 4. 폴더는 있는데 digest가 없거나 FAIL → 재추출 없이 `ready`(이어서 진행).
+- 라이브러리: 출력 폴더 + 아직 처리 안 된 src/ PDF(`New`)를 함께 보여준다. `Process ▾` 드롭다운: Run all / Summary & report / Translation / Highlights / Figure notes. 끝난 단계는 체크 표시, 불가능한 단계는 비활성(이유는 툴팁).
+  - API: `POST /api/papers/{id}/run {"action": ...}` (기존 `/annotate` 대체). Run all = (digest가 PASS가 아니면) digest → 남은 주석 단계 전부.
+  - `scripts/annotate.sh -n NAME --only translation,highlights,figures`. `--only` 없으면 skill이 이미 완료된 부분은 건너뜀.
+- UI는 영어만. 번역 언어는 `configs/cfg.yaml`의 `target_lang` (기본 `ko`). viewer.json의 언어 의존 키는 `tr`/`note_tr` + 최상위 `lang`.
+- "Method Not Allowed" 원인: Phase 3 이전에 띄운 서버(`--reload` 없음)가 계속 떠 있어 POST 라우트가 없었다. 서버를 재시작하면 해결. 이제 클라이언트가 405를 "서버가 오래됨, 재시작" 메시지로 보여준다.
+- 테스트: selftest(+ 레지스트리·prepare 복사/이어하기/중복, run API) / vitest 16 / Playwright 8.
 

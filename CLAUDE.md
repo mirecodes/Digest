@@ -5,12 +5,13 @@ For any paper request, follow the `/paper-digest` skill exactly.
 
 ## Layout
 ```
-configs/cfg.yaml   out_dir (empty = out/), title_words, max_papers (per run without -n)
-functions/         prepare, paper_name, extract_pdf, verify, selftest
-scripts/           user entry points: setup.sh, digest.sh [-n NAME]
+configs/cfg.yaml   out_dir (empty = out/), target_lang (viewer translations), title_words, max_papers (per run without -n)
+functions/         prepare, registry, paper_name, extract_pdf, verify, selftest
+scripts/           user entry points: setup.sh, digest.sh [-n NAME], annotate.sh [-n NAME] [--only PARTS], viewer.sh
 scripts/internal/  prepare, verify, selftest (.sh; _env.sh is a sourced helper)
-src/               input queue; a PDF is moved out once prepared (subfolders are mirrored)
+src/               input folder, never modified; a PDF is copied out when prepared (subfolders are mirrored)
 web/               viewer frontend (React + Vite + pdf.js); docs/ viewer plan and decision log
+<out_dir>/.paper-registry.yaml   every paper by PDF hash: src/ paths, output folder, state (rebuilt from disk)
 <out_dir>/<subfolders>/<Short Title (Year)>/
   <name>.pdf, "<name> - report.md", "<name> - summary.md"
   .work/           pages.md (citation basis), captions.md, evidence.md; hidden from Obsidian
