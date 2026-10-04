@@ -402,7 +402,7 @@ scripts/internal/viewer_test.sh [--e2e]
 | 2 | FastAPI 서버, 라이브러리, 2-pane 리더, **페이지 싱크 스크롤**, 블록 링크 | done |
 | 3 | `/paper-annotate` skill, verify_annotations, viewer.json 번들, 전처리 job | done |
 | 3.5 | 논문 레지스트리(중복 방지, src/ 보존), 단계별 실행 드롭다운, 영어 UI, `target_lang` | done |
-| 4 | 자동 하이라이트 레이어, **피규어 호버 해설 popover**, bbox 수정 | planned |
+| 4 | 자동 하이라이트 레이어, **피규어 호버 해설 popover**, bbox 수정 | partial (bbox 수정 남음) |
 | 5 | LLM 백엔드, 선택/영역 설명, 선택·페이지 번역, 채팅, grounding 배지 | planned |
 | 6 | 사용자 하이라이트·메모, notes.md / annotated.pdf 내보내기 | planned |
 | 7 | 참고문헌 미리보기, 다크 모드, 단축키, 정밀 싱크, 성능 | planned |
@@ -454,5 +454,12 @@ scripts/internal/viewer_test.sh [--e2e]
 - UI는 영어만. 번역 언어는 `configs/cfg.yaml`의 `target_lang` (기본 `ko`). viewer.json의 언어 의존 키는 `tr`/`note_tr` + 최상위 `lang`.
 - "Method Not Allowed" 원인: Phase 3 이전에 띄운 서버(`--reload` 없음)가 계속 떠 있어 POST 라우트가 없었다. 서버를 재시작하면 해결. 이제 클라이언트가 405를 "서버가 오래됨, 재시작" 메시지로 보여준다.
 - 테스트: selftest(+ 레지스트리·prepare 복사/이어하기/중복, run API) / vitest 16 / Playwright 8.
+**Phase 4 — 오버레이** (decisions.md D4-*)
+- 하이라이트: PDF 위에 카테고리 색으로 연하게 표시 (헤더 `Highlights` 버튼 / `H`). 위에 0.5초 올리면 카테고리·메모 tooltip. 사이드바 `Highlights` 탭에서 카테고리 켜고 끄기, 목록 클릭 시 이동. 번역 패널에는 해당 블록 왼쪽에 색 막대.
+- 피규어 해설: 피규어에 0.35초 올리거나 우하단 ⓘ에 올리면 플로팅 패널. 클릭하면 고정, Esc로 닫기. KO/EN 전환. 사이드바 `Figures` 탭에서도 열 수 있다.
+- 오래된 viewer.json(스키마 v1)은 열 때 자동 재빌드.
+- 테스트: vitest 27 (popover 타이밍·배치, 인용 파싱, 하이라이트 매핑) / Playwright 13 (§12.3의 4, 5 + 하이라이트 tooltip + text layer 대비 위치 오차 dx 1.20pt, dy 0.24pt).
+- 남은 것: 피규어 bbox 수정.
+
 - AI 백엔드 선택 (D3.5-6): `configs/cfg.yaml`의 `agent.backend: claude | codex | gemini`, `agent.model` (빈 값 = CLI 기본). 모든 AI 실행은 `scripts/internal/agent.sh`를 거친다 (`--check` 로그인 확인, `--dry-run` 명령 확인). 한 번만 바꿔 쓰기: `PAPER_AGENT=gemini scripts/digest.sh`. 사용자 가이드는 `README.md`.
 

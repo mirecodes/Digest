@@ -101,7 +101,14 @@ With Claude Code you can also type `/paper-digest` or `/paper-annotate -n NAME` 
 - **Summary & report**, **Translation**, **Highlights**, **Figure notes**: one step each.
 
 Finished steps show a check mark. The job log streams under the row. **Open** shows the PDF and its translation side
-by side.
+by side:
+
+- **Highlights**: key sentences are tinted on the PDF by category (problem, contribution, insight, method, result,
+  limitation). Hover one for its note. Toggle them with the **Highlights** button or `H`, and filter by category in
+  the sidebar's Highlights tab.
+- **Figure notes**: hover a figure (or its ⓘ badge) for a floating explanation. Click to keep it open, `Esc` to
+  close. The sidebar's Figures tab lists them all.
+- Keys: `H` highlights, `T` translation pane, `S` sync, `[` sidebar, `J`/`K` next/previous page, `/` search.
 
 ## Configuration (`configs/cfg.yaml`)
 

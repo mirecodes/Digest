@@ -4,15 +4,15 @@ import { cropUrl } from "../api/client";
 import { cardItems, columnBox, layoutCard, type CardItem } from "../lib/cardLayout";
 import { useStore } from "../lib/store";
 import { t } from "../i18n";
-import type { Block, Figure, PageInfo } from "../types";
+import type { Block, Category, Figure, PageInfo } from "../types";
 import { useNav } from "./nav";
 
 const CARD_PAD = 12; // px below the last item
 const MIN_FONT = 11;
 
-type Props = { paperId: string; info: PageInfo; blocks: Block[]; figures: Figure[]; s: number };
+type Props = { paperId: string; info: PageInfo; blocks: Block[]; figures: Figure[]; s: number; hlCats: Map<string, Category> };
 
-function TranslationPage({ paperId, info, blocks, figures, s }: Props) {
+function TranslationPage({ paperId, info, blocks, figures, s, hlCats }: Props) {
   const nav = useNav();
   const setLink = useStore((st) => st.setLink);
   const items = useMemo(() => cardItems(info, blocks, figures), [info, blocks, figures]);
@@ -68,8 +68,10 @@ function TranslationPage({ paperId, info, blocks, figures, s }: Props) {
     }
     const b = it.block;
     const untranslated = b.translate && !b.tr;
+    const cat = hlCats.get(b.id);
     return (
-      <div key={it.key + (it.key === flash?.id ? flash.n : "")} className={`tr-block kind-${b.kind}${untranslated ? " untranslated" : ""}${cls}`}
+      <div key={it.key + (it.key === flash?.id ? flash.n : "")} data-hl={cat}
+        className={`tr-block kind-${b.kind}${untranslated ? " untranslated" : ""}${cat ? ` has-hl hl-${cat}` : ""}${cls}`}
         data-block-id={it.key} title={untranslated ? t("untranslated") : undefined} style={style} {...common}>
         {b.tr ?? b.text}
       </div>

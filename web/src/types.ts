@@ -67,7 +67,7 @@ export interface OutlineItem {
 }
 
 export interface ViewerData {
-  version: 1;
+  version: 2;
   built_at: string;
   lang: string; // target_lang of translations and notes (configs/cfg.yaml)
   paper: {

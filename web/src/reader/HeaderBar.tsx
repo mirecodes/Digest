@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { navigate } from "../App";
 import { t } from "../i18n";
 import { useStore } from "../lib/store";
-import { BackIcon, ColumnsIcon, LockIcon, SidebarIcon, UnlockIcon } from "./icons";
+import { BackIcon, ColumnsIcon, HighlightIcon, LockIcon, SidebarIcon, UnlockIcon } from "./icons";
 import { useNav } from "./nav";
 
 const ZOOMS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
@@ -92,6 +92,7 @@ export default function HeaderBar() {
   const sync = useStore((s) => s.sync);
   const showTr = useStore((s) => s.showTr);
   const sidebar = useStore((s) => s.sidebar);
+  const showHl = useStore((s) => s.showHl);
   const toggle = useStore((s) => s.toggle);
   const current = useStore((s) => s.scale);
   const step = (dir: 1 | -1) => {
@@ -112,6 +113,9 @@ export default function HeaderBar() {
       <span className="sep" />
       <button className={`toggle${sidebar ? " on" : ""}`} onClick={() => toggle("sidebar")} title={`${t("sidebar")} ([)`} aria-pressed={sidebar}>
         <SidebarIcon />{t("sidebar")}
+      </button>
+      <button className={`toggle${showHl ? " on" : ""}`} onClick={() => toggle("showHl")} title={`${t("highlights")} (H)`} data-testid="toggle-hl" aria-pressed={showHl}>
+        <HighlightIcon />{t("highlights")}
       </button>
       <button className={`toggle${showTr ? " on" : ""}`} onClick={() => toggle("showTr")} title={`${t("tr_panel")} (T)`} data-testid="toggle-tr" aria-pressed={showTr}>
         <ColumnsIcon />{t("tr_panel")}

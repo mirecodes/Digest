@@ -4,9 +4,11 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { PAGE_GAP, PANE_PAD, stackTops } from "../lib/coords";
 import { mapRef, pageAt, refPage, type PaneLayout } from "../lib/scrollSync";
+import { visible } from "../lib/highlights";
 import { useStore } from "../lib/store";
-import type { Block, Figure } from "../types";
+import type { Block, Figure, Highlight, Rect } from "../types";
 import PdfPage from "./PdfPage";
+import Popover from "./Popover";
 
 const RENDER_MARGIN = 2; // pages rendered beyond the visible ones
 
@@ -39,13 +41,21 @@ export default function PdfPane({ doc, elRef, onLayout }: Props) {
   }, [data.pages, scale]);
   const total = layout.tops.length ? layout.tops[layout.tops.length - 1] + layout.heights[layout.heights.length - 1] + PANE_PAD : 0;
 
+  const showHl = useStore((s) => s.showHl);
+  const hiddenCats = useStore((s) => s.hiddenCats);
   const byPage = useMemo(() => {
-    const m = new Map<number, { blocks: Block[]; figures: Figure[] }>();
-    for (const p of data.pages) m.set(p.page, { blocks: [], figures: [] });
+    const m = new Map<number, { blocks: Block[]; figures: Figure[]; highlights: Highlight[] }>();
+    for (const p of data.pages) m.set(p.page, { blocks: [], figures: [], highlights: [] });
     for (const b of data.blocks) m.get(b.page)?.blocks.push(b);
     for (const f of data.figures) m.get(f.page)?.figures.push(f);
+    for (const h of visible(data.highlights, showHl, hiddenCats)) m.get(h.page)?.highlights.push(h);
     return m;
-  }, [data]);
+  }, [data, showHl, hiddenCats]);
+  const pageLeft = (i: number) => Math.max(PANE_PAD, (width - data.pages[i].width * scale) / 2);
+  const clientBox = (page: number, r: Rect) => {
+    const b = elRef.current?.querySelector(`.pdf-page[data-page="${page}"]`)?.getBoundingClientRect();
+    return b ? { left: b.left + r[0] * scale, top: b.top + r[1] * scale, right: b.left + r[2] * scale, bottom: b.top + r[3] * scale } : null;
+  };
 
   // keep the reading position when the scale changes (zoom, resize)
   const prev = useRef<PaneLayout | null>(null);
@@ -89,13 +99,14 @@ export default function PdfPane({ doc, elRef, onLayout }: Props) {
           const w = p.width * scale;
           return (
             <div key={p.page} className="pdf-page" data-page={p.page}
-              style={{ top: layout.tops[i], width: w, height: layout.heights[i], left: Math.max(PANE_PAD, (width - w) / 2) }}>
+              style={{ top: layout.tops[i], width: w, height: layout.heights[i], left: pageLeft(i) }}>
               {i >= range[0] && i <= range[1] && width > 0 && (
-                <PdfPage doc={doc} info={p} scale={scale} blocks={byPage.get(p.page)!.blocks} figures={byPage.get(p.page)!.figures} />
+                <PdfPage doc={doc} info={p} scale={scale} {...byPage.get(p.page)!} />
               )}
             </div>
           );
         })}
+        {width > 0 && <Popover clientBox={clientBox} scroller={elRef} />}
       </div>
     </div>
   );

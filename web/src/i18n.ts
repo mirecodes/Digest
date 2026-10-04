@@ -46,6 +46,23 @@ const en = {
   load_failed: "Failed to load",
   untranslated: "Not translated — showing the original",
   server_outdated: "The viewer server is out of date. Restart scripts/viewer.sh.",
+  figures: "Figures",
+  show_highlights: "Show highlights",
+  no_highlights: "No highlights yet. In the library, run Process ▸ Highlights.",
+  no_figures: "No figures or tables detected.",
+  no_note: "No note for this figure yet. In the library, run Process ▸ Figure notes.",
+  note_skipped: "No note: skipped while annotating",
+  low_conf: "The detected box may not cover the whole figure.",
+  close: "Close",
+  pin_hint: "Click to keep it open",
+  source_evidence: "Evidence",
+  source_highlight: "Key sentence",
+  cat_problem: "Problem",
+  cat_contribution: "Contribution",
+  cat_insight: "Insight",
+  cat_method: "Method",
+  cat_result: "Result",
+  cat_limitation: "Limitation",
 };
 export type Key = keyof typeof en;
 

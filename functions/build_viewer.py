@@ -23,7 +23,7 @@ from functions.prepare import ROOT, load_config, out_root
 from functions.verify import WORK_DIR, output_path
 from functions.verify_annotations import verify_annotations
 
-VERSION = 1
+VERSION = 2   # bump on schema changes: ensure_viewer rebuilds bundles of another version (2: tr/note_tr keys, lang)
 CITE_RE = re.compile(r"\s*\[[^\]]*\]")
 GOLDEN = ROOT / "tests" / "fixtures" / "viewer.sample.json"
 
@@ -115,9 +115,17 @@ def ensure_viewer(paper_dir: Path, root: Path | None = None) -> Path:
     paper_dir = paper_dir.resolve()
     build_layout(paper_dir)
     out = paper_dir / WORK_DIR / "viewer.json"
-    if out.exists() and all(out.stat().st_mtime >= f.stat().st_mtime for f in inputs(paper_dir)):
+    if out.exists() and _version(out) == VERSION and all(out.stat().st_mtime >= f.stat().st_mtime for f in inputs(paper_dir)):
         return out
     return build_viewer(paper_dir, root)
+
+
+def _version(path: Path) -> int | None:
+    """Schema version of an existing bundle (keys are sorted, so "version" is the last one: read the tail only)."""
+    with open(path, "rb") as f:
+        f.seek(max(0, path.stat().st_size - 64))
+        m = re.search(rb'"version":\s*(\d+)\s*}\s*$', f.read())
+    return int(m.group(1)) if m else None
 
 
 def golden_bundle() -> dict:

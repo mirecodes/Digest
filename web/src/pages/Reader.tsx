@@ -4,6 +4,8 @@ import * as pdfjs from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { loadViewer } from "../api/client";
 import { t } from "../i18n";
+import { union } from "../lib/highlights";
+import { closePop } from "../lib/popover";
 import { bindScrollSync, type PaneLayout } from "../lib/scrollSync";
 import { useStore } from "../lib/store";
 import HeaderBar from "../reader/HeaderBar";
@@ -63,7 +65,9 @@ export default function Reader({ paperId, initialPage }: { paperId: string; init
     const findTarget = (id: string) => {
       const d = useStore.getState().data;
       const b = d?.blocks.find((x) => x.id === id) ?? d?.figures.find((x) => x.id === id);
-      return b ? { page: b.page, bbox: b.bbox } : null;
+      if (b) return { page: b.page, bbox: b.bbox };
+      const h = d?.highlights.find((x) => x.id === id);
+      return h ? { page: h.page, bbox: union(h.rects) } : null;
     };
     return {
       goToPage(page) {
@@ -122,10 +126,12 @@ export default function Reader({ paperId, initialPage }: { paperId: string; init
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closePop();
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.metaKey || e.ctrlKey || e.altKey) return;
       const st = useStore.getState();
       const key = e.key.toLowerCase();
-      if (key === "t") st.toggle("showTr");
+      if (key === "h") st.toggle("showHl");
+      else if (key === "t") st.toggle("showTr");
       else if (key === "s") st.toggle("sync");
       else if (key === "[") st.toggle("sidebar");
       else if (key === "j" && st.data) nav.goToPage(Math.min(st.data.pages.length, st.page + 1));
