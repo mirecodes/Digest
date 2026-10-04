@@ -147,6 +147,7 @@ renamed or duplicate PDF is not processed twice. Deleting a paper folder makes t
 | `[agent] ERROR: the … CLI is not installed` | install and log in as shown in the message, then `scripts/internal/agent.sh --check` |
 | Job fails right after starting with an auth error | log in again with the CLI (`claude`, `codex login`, `gemini`) or check the API key variable |
 | "The viewer server is out of date" / *Method Not Allowed* | an old `scripts/viewer.sh` is still running; stop it (Ctrl+C) and start it again |
+| `address already in use` on port 8765 | update and run `scripts/viewer.sh` again: it stops a leftover viewer on that port, or moves to the next free port if another program uses it (printed at start). Or set `viewer.port` in `cfg.yaml` |
 | `skip (PDF looks scanned …)` | the PDF has no text layer; run OCR first (e.g. `ocrmypdf in.pdf out.pdf`) |
 | `skip (already digested …)` | nothing to do; delete the paper folder to redo it |
 | "Not downloaded from iCloud" in the reader | open the folder in Finder and download the PDF |

@@ -96,6 +96,12 @@ def papers():
     return [e.to_dict() for e in _rescan()]
 
 
+@app.get("/api/health")
+def health():
+    """Identifies a running viewer, so scripts/viewer.sh can replace a leftover one instead of failing on the port."""
+    return {"app": "paper-viewer", "pid": os.getpid()}
+
+
 @app.get("/api/config")
 def config():
     cfg = viewer_cfg()

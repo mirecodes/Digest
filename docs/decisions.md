@@ -249,5 +249,15 @@
 - 실제 실행 (vault `Robust Recovery Controller Quadrupedal Robot (2019)`, `scripts/annotate.sh -n … --only highlights`, Claude Code 2.1.285): 1분 17초, exit 0. 하이라이트 45개(evidence) → 20개 (problem 1, prior_work 3, assumption 1, contribution 3, method 4, result 4, insight 2, limitation 2), 페이지당 최대 6, verify_annotations PASS (ERROR 0, WARN 0). 메모가 "역할: 요약" 형식으로 쓰였고 숫자(97%, 50가지, 1 cm)는 인용 문장에 있는 값이었다.
 - 기존 주석 논문의 highlights.md(H 블록 0개)는 하이라이트가 비게 된다. `Process ▸ Highlights`로 다시 만들어야 하며, Run all의 "완료" 판정도 H 블록 수 기준으로 바꿨다.
 
+### D4-8. 뷰어 포트 충돌 (`[Errno 48] address already in use`)
+- 원인: 에이전트가 확인용으로 `nohup scripts/viewer.sh &`로 띄운 서버(부모가 사라진 고아 프로세스)가 8765를 잡고 있었다. 정상 종료(Ctrl+C)하면 포트는 바로 풀린다. 문제는 남은 프로세스이며, 남은 서버는 예전 405 오류처럼 옛 코드를 계속 서빙한다.
+- 대응 (`functions/viewer/port.py`, viewer.sh 시작 시 호출):
+  - 포트가 비어 있으면 그대로 쓴다. 검사는 uvicorn처럼 `SO_REUSEADDR`로 바인드한다 (그렇지 않으면 직전 연결의 TIME_WAIT 때문에 빈 포트를 사용 중으로 오판한다 — 시험 중 실제로 발생).
+  - `GET /api/health`가 `{"app": "paper-viewer"}`이면 남은 뷰어로 보고 SIGTERM으로 종료한 뒤 그 포트를 쓴다. 종료 대상은 health의 pid와 `lsof`로 찾은 그 포트의 LISTEN 프로세스(`--reload`에서는 소켓을 supervisor가 가짐)뿐이다. 처음에는 부모 프로세스를 명령줄에 "uvicorn"이 있는지로 판단했으나, 그 문자열을 포함한 셸까지 죽이는 것을 시험에서 확인해 버렸다.
+  - 다른 프로그램이면 건드리지 않고 다음 빈 포트(최대 20개)로 옮기고 알린다.
+- `--dev` 종료: trap이 자기 자식 트리(uvicorn reloader, npm → vite)만 재귀로 종료한다. `kill 0`은 호출한 쪽의 프로세스 그룹까지 죽여서 쓰지 않았다.
+- 시험(별도 스크립트): 첫 뷰어 → 두 번째 실행이 교체, SIGINT 후 포트 해제, 다른 프로그램이 점유 시 8766으로 이동하고 그 프로그램은 유지, 남은 `--dev` 뷰어 교체, `--dev` SIGTERM 후 포트·프로세스 0. selftest에 포트 선택 검사 추가.
+- health 엔드포인트가 없는 이전 버전 서버는 자동 식별이 안 된다 (이번 고아 프로세스는 수동 종료).
+
 ### D4-6. 남은 Phase 4 항목
 - 피규어 bbox 수정(`PUT …/bbox`, figure_overrides.json)은 아직 구현하지 않았다. 요청 범위(보기)에 없었고, 실측 low_conf 0이라 급하지 않다.

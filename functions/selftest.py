@@ -140,6 +140,21 @@ def check_agent(failures: list) -> None:
         failures.append(f"agent: unknown backend should exit 2, got {r.returncode}")
 
 
+def check_port(failures: list) -> None:
+    """A free port is kept; one held by another program (not a Paper Viewer) is skipped, never stopped."""
+    import socket
+    from functions.viewer.port import is_free, pick_port
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        s.listen()
+        busy = s.getsockname()[1]
+        picked = pick_port("127.0.0.1", busy)
+        if picked == busy or not is_free("127.0.0.1", picked):
+            failures.append(f"port: busy {busy} should move to a free port, got {picked}")
+    if pick_port("127.0.0.1", busy) != busy:
+        failures.append(f"port: a free port {busy} should be kept")
+
+
 def check_selection(failures: list) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp)
@@ -407,6 +422,7 @@ def main() -> int:
     check_naming(failures)
     check_selection(failures)
     check_agent(failures)
+    check_port(failures)
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp).resolve()   # macOS: /var -> /private/var; the registry and server report resolved paths
         paper, truth = build_paper(tmp)

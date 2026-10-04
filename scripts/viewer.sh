@@ -3,6 +3,8 @@
 # Usage: scripts/viewer.sh [--dev] [--port N] [--no-open]
 #   default: serve the built frontend (web/dist) at http://<viewer.host>:<viewer.port> (configs/cfg.yaml, 127.0.0.1:8765)
 #   --dev:   uvicorn --reload plus the Vite dev server (http://127.0.0.1:5173, proxies /api); Ctrl+C stops both
+# A viewer still running on the port (e.g. from a closed terminal) is stopped and replaced; if another program
+# holds the port, the next free one is used. Ctrl+C stops the server and frees the port.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/internal/_env.sh"
 cd "$ROOT"
@@ -20,6 +22,8 @@ while [ $# -gt 0 ]; do
 done
 read -r HOST CFG_PORT < <("$PY" -c 'from functions.papers import viewer_cfg; c = viewer_cfg(); print(c["host"], c["port"])')
 PORT="${PORT:-$CFG_PORT}"
+# a leftover viewer on the port is stopped and replaced; another program's port is skipped for the next free one
+PORT="$("$PY" -m functions.viewer.port "$HOST" "$PORT")"
 
 open_url() {
   [ "$OPEN" -eq 1 ] || return 0
@@ -31,7 +35,10 @@ if [ "$DEV" -eq 1 ]; then
   API_PID=$!
   (cd web && VIEWER_API_PORT="$PORT" npm run dev -- --host 127.0.0.1 --port 5173) &
   WEB_PID=$!
-  trap 'kill $API_PID $WEB_PID 2>/dev/null' EXIT INT TERM
+  # stop both process trees (uvicorn's reloader worker, npm -> vite), so no port stays taken; only our own
+  # descendants, never the caller's process group
+  kill_tree() { local c; for c in $(pgrep -P "$1"); do kill_tree "$c"; done; kill "$1" 2>/dev/null || true; }
+  trap 'trap - EXIT INT TERM; kill_tree $API_PID; kill_tree $WEB_PID' EXIT INT TERM
   open_url "http://127.0.0.1:5173"
   wait
 else
