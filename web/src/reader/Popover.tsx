@@ -20,11 +20,11 @@ export function CitationText({ text }: { text: string }) {
       {parseCitations(text).map((s, i) => {
         if (s.type === "text") return <span key={i}>{s.text}</span>;
         if (s.type === "cite") {
-          const e = evidence[s.eid];
+          const e = s.eid ? evidence[s.eid] : undefined;
           return (
-            <button key={i} className="cite" title={e ? `"${e.quote}"` : s.eid}
+            <button key={i} className="cite" title={e ? `"${e.quote}"` : s.eid ?? `p.${s.page}`}
               onClick={() => nav.goToPage(s.page ?? e?.page ?? 1)}>
-              {s.eid}{s.page ? `, p.${s.page}` : ""}
+              {[s.eid, s.page ? `p.${s.page}` : ""].filter(Boolean).join(", ")}
             </button>
           );
         }

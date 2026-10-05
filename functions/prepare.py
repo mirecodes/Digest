@@ -12,9 +12,12 @@ Layout: <out_root>/<path of the PDF relative to src/>/<Paper Name>/
 
 <out_root> is `out_dir` from configs/cfg.yaml, or <project>/out when it is empty.
 
-Usage (via wrapper): scripts/internal/prepare.sh [-n NAME] [--list] [--force] [--dry-run] [--offline]
+Usage (via wrapper): scripts/internal/prepare.sh [-n NAME] [--list] [--force] [--ensure] [--dry-run] [--offline]
 Each prepared paper prints `[prepare] ready: <folder>`; skipped ones print `[prepare] skip ...`.
 A PDF whose folder exists but whose digest is missing or failed is resumed: `ready` again, without re-extracting.
+--ensure: the first step of every processing job (viewer, annotate.sh): prepare if needed, and report an already
+digested paper as `ready` (exit 0) instead of exit 4, so translation, highlights and figure notes never wait for the
+digest.
 Exit codes: 0 ok, 1 nothing selected / input error.
   With -n only: 2 PDF looks scanned (needs OCR), 3 another paper's folder has the same name,
   4 already digested (verify PASS; --force redoes it).
@@ -92,7 +95,7 @@ def prepare_one(pdf: Path, cfg: dict, args, papers: dict) -> int:
     known = papers.get(sha, {}).get("folder")
     if known and (root / known).is_dir():
         dest = root / known
-        if digest_verify(dest) == "PASS" and not args.force:
+        if digest_verify(dest) == "PASS" and not args.force and not getattr(args, "ensure", False):
             print(f"[prepare] skip (already digested, verify PASS): {dest}")
             return EXIT_DONE
         if (dest / WORK_DIR / "pages.md").is_file() and not args.force:
@@ -135,6 +138,8 @@ def main() -> int:
     parser.add_argument("-n", "--name", help="one paper: path, or src/ relative path / file name / stem")
     parser.add_argument("--list", action="store_true", help="print the selected src/ papers and exit")
     parser.add_argument("--force", action="store_true", help="reuse an existing output folder")
+    parser.add_argument("--ensure", action="store_true",
+                        help="make sure the paper is prepared (copy, extract, register); already done is success")
     parser.add_argument("--dry-run", action="store_true", help="print names and folders only")
     parser.add_argument("--offline", action="store_true", help="skip arXiv/Crossref, use PDF metadata only")
     args = parser.parse_args()

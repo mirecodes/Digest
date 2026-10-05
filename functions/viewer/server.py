@@ -159,14 +159,19 @@ class RunRequest(BaseModel):
 
 
 def _steps(e: PaperEntry, action: str) -> list[Step]:
-    """all: summary (unless it passed) then every missing annotation part; otherwise the one script it names."""
+    """Every job starts by preparing the paper (copy the PDF, extract the text, register it; instant when done), so
+    each action runs on its own. all: summary (unless it passed), then every missing annotation part."""
+    pdf = e.source or str(find_pdf(Path(e.folder)))
+    steps: list[Step] = [("internal/prepare.sh", ["--ensure", "-n", pdf])]
+    # a new paper has no folder yet: annotate.sh finds the one prepare made from the PDF (via the registry)
+    target = e.folder or pdf
     if action in ANNOTATE_PARTS:
-        return [("annotate.sh", ["-n", e.folder, "--only", action])]
-    digest = ("digest.sh", ["-n", e.source or str(find_pdf(Path(e.folder)))])
-    if action == "digest":
-        return [digest]
-    # a new paper has no folder yet: annotate.sh finds the one the digest made from the PDF (via the registry)
-    return ([digest] if e.digest_verify != "PASS" else []) + [("annotate.sh", ["-n", e.folder or e.source])]
+        return steps + [("annotate.sh", ["-n", target, "--only", action])]
+    if action == "digest" or e.digest_verify != "PASS":
+        steps.append(("digest.sh", ["-n", pdf]))
+    if action == "all":
+        steps.append(("annotate.sh", ["-n", target]))
+    return steps
 
 
 @app.post("/api/papers/{pid}/run")
@@ -174,8 +179,6 @@ def run(pid: str, req: RunRequest):
     e = _entry(pid)
     if e.status != "new":
         _folder(pid)            # refuses evicted papers
-    if req.action in ANNOTATE_PARTS and e.status == "new":
-        raise HTTPException(409, "the paper is not prepared yet; run the summary first")
     if req.action == "digest" and e.digest_verify == "PASS":
         raise HTTPException(409, "the summary is already done (verify PASS)")
     log_dir = Path(e.folder) / WORK_DIR / "viewer" / "jobs" if e.folder else viewer_root() / ".paper-jobs"

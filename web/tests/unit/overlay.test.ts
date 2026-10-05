@@ -90,6 +90,9 @@ describe("citations", () => {
       { type: "text", text: " end" },
     ]);
   });
+  it("parses a bare page citation", () => {
+    expect(parseCitations("about 0.8 [p.3]")).toEqual([{ type: "text", text: "about 0.8 " }, { type: "cite", eid: null, page: 3 }]);
+  });
   it("leaves reference numbers like [12] as text", () => {
     expect(parseCitations("as in [12]")).toEqual([{ type: "text", text: "as in [12]" }]);
   });

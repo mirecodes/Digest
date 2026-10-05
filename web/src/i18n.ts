@@ -17,7 +17,6 @@ const en = {
   action_highlights_hint: "Pick the key sentences to highlight",
   action_figures: "Figure notes",
   action_figures_hint: "Explain every figure and table",
-  needs_digest: "Run the summary first",
   already_done: "Done",
   job_queued: "Queued",
   job_running: "Running",

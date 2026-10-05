@@ -22,8 +22,11 @@ Write only these files: `<work>/translate/glossary.md`, `<work>/translate/pNNN.<
 `<work>/figure_notes.md`. Never edit the report, summary, evidence.md, pages.md, the PDF, or anything in `layout/`.
 
 ## Preconditions
-- `<work>/pages.md` exists (the paper was prepared by /paper-digest). `<work>/evidence.md` and the report are
-  strongly preferred. Without evidence.md, highlights come only from H blocks and figure notes cannot use `[E#]`.
+- `<work>/pages.md` exists. Every part runs on its own: the paper only needs to be prepared (copied, extracted,
+  registered), which the viewer and `scripts/annotate.sh` do before calling this skill
+  (`scripts/internal/prepare.sh --ensure -n "<PDF>"`). The digest (report, summary, evidence.md) is **not** required.
+- If the digest exists, use it as context. If it does not: read pages.md alone; in figure notes cite numbers from the
+  text with `[p.N]` (the page in pages.md) instead of `[E#, p.N]`.
 
 ## Steps
 
@@ -39,12 +42,13 @@ translation `N/N`, highlights with at least 8 H blocks (an older highlights.md w
 figure notes `N/N`. If all three are complete, go to step 9.
 
 ### 2. Read context
-`<name> - summary.md`, the Glossary section of `<name> - report.md`, `<work>/evidence.md`,
-`<work>/layout/figures.json`, and `<work>/pages.md` (all of it, in chunks).
+`<work>/pages.md` (all of it, in chunks) and `<work>/layout/figures.json`; plus, when they exist,
+`<name> - summary.md`, the Glossary section of `<name> - report.md`, and `<work>/evidence.md`.
 
 ### 3. Glossary → `<work>/translate/glossary.md`
 One line per term: `English → <target-language term>` (keep the English term when it is conventionally
-untranslated, e.g. `attention → attention`). Start from the report Glossary. Use it consistently on every page.
+untranslated, e.g. `attention → attention`). Start from the report Glossary if there is one, otherwise from the
+paper's own terms. Use it consistently on every page.
 If glossary.md exists for another language, rewrite it for `<lang>`.
 
 ### 4. Translate page by page → `<work>/translate/pNNN.<lang>.md`
@@ -68,7 +72,7 @@ ids). Review each WARN: dropped numbers or citation numbers, untranslated paragr
 Template: `templates/highlights.md`. Highlights are **not** the evidence: evidence.md is a detailed internal record
 for the report and is never highlighted. Highlights are a short, curated map that lets a reader grasp the whole
 paper at a glance — the sentences you would mark for a colleague who has ten minutes. Work in two passes:
-1. **Outline first** (from the summary, the report and your reading): in one line each, what is the problem, what
+1. **Outline first** (from your reading, and the summary and report if they exist): in one line each, what is the problem, what
    does the paper assume, what did prior work do and where does it fall short, what is contributed, what is the core
    method, what are the main results, and what is the key insight or limitation.
 2. **Anchor each line** to the one sentence in the paper that states it best, and write the line as the note.
@@ -91,7 +95,7 @@ Rules:
   Prefer the sentence that states the point in general terms over one buried in detail.
 - `note_<lang>` (target language) and `note_en`: the one-line summary the reader sees first. Start with the
   role, then the content in your own words, e.g. `풀려는 문제: …`, `기존 방법의 한계: …`, `핵심 방법: …`,
-  `주요 결과: …`. Numbers in a note must appear in the quoted sentence or in evidence.md (never from memory).
+  `주요 결과: …`. Numbers in a note must appear in the quoted sentence (or evidence.md, if any); never from memory.
 - Do not highlight related-work sentences about other papers' details, implementation trivia, or captions.
 
 ### 7. Figure notes → `<work>/figure_notes.md`
@@ -103,7 +107,8 @@ listed in `refs`, then write a `#### <lang>` section first and a `#### en` secti
 - how to read — axes, legend, symbols;
 - 2–4 observations as bullets;
 - link to text — which contribution (C#) or claim it supports.
-Markers: numbers from the paper text → `[E#, p.N]`; values read off the image → `[FIG: <fid>]`; computed →
+Markers: numbers from the paper text → `[E#, p.N]` when evidence.md has them, otherwise `[p.N]` (page of
+pages.md); values read off the image → `[FIG: <fid>]`; computed →
 `[CALC: …]`; your judgement → `[INTERP]`; outside knowledge → `[EXT]`. A number without a marker is a warning.
 If the crop is wrong or unreadable (e.g. the box misses the legend), write `- status: SKIP` with `- reason: …`;
 low-confidence boxes are listed in figures.json (`confidence` < 0.6).

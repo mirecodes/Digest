@@ -27,8 +27,8 @@ function actionState(p: PaperEntry, a: Action): { done: boolean; blocked: Key | 
     figures: complete(p.figure_notes),
     all: digested && complete(p.translation) && p.highlights > 0 && complete(p.figure_notes),
   }[a];
-  const blocked: Key | null =
-    a === "digest" && digested ? "already_done" : p.status === "new" && a !== "all" && a !== "digest" ? "needs_digest" : null;
+  // every action stands alone (the job prepares the paper first); only a passed summary is not redone
+  const blocked: Key | null = a === "digest" && digested ? "already_done" : null;
   return { done, blocked };
 }
 

@@ -273,6 +273,7 @@ def check_papers(root: Path, paper: Path, failures: list) -> None:
 EXPECTED_ANNOTATION_ERRORS = [
     "missing translation for p2-b5", "unknown block p9-b9", "H98: quote not found", "H99: category 'novelty'",
     "figure 'fig-p9-0' is not in", "unknown evidence E9", "[FIG: fig-nope] refers to an unknown figure",
+    "[p.99] is outside the paper",
 ]
 EXPECTED_ANNOTATION_WARNINGS = ["p2-b6 drops numbers ['61.4']"]
 # highlights come only from H blocks: 9 in the fixture, covering every core category (no coverage warning)
@@ -349,9 +350,12 @@ def check_registry(root: Path, paper: Path, src: Path, failures: list) -> None:
         if made:
             output_path(made, "report").write_text("> verify: PASS\n", encoding="utf-8")
         codes.append(prepare_one(fresh, cfg, args, sync(root, src)[0]))
-    if not fresh.is_file() or made is None or codes != [0, 0, EXIT_DONE] or "resuming" not in out.getvalue():
-        failures.append(f"prepare: expected copy, resume, already-digested; got codes {codes}, folder {made}, "
-                        f"src kept {fresh.is_file()}")
+        # --ensure (first step of every job): an already digested paper is simply ready
+        codes.append(prepare_one(fresh, cfg, Namespace(force=False, dry_run=False, offline=True, ensure=True),
+                                 sync(root, src)[0]))
+    if not fresh.is_file() or made is None or codes != [0, 0, EXIT_DONE, 0] or "resuming" not in out.getvalue():
+        failures.append(f"prepare: expected copy, resume, already-digested, ensure-ready; got codes {codes}, "
+                        f"folder {made}, src kept {fresh.is_file()}")
     elif made:
         shutil.rmtree(made)     # leave the tree as the server check expects it
         sync(root, src)
@@ -397,16 +401,18 @@ def check_server(root: Path, src: Path, failures: list) -> None:
     new_api = f"/api/papers/{new[0]['id']}"
     run = lambda url, action: client.post(f"{url}/run", json={"action": action})
     cases = [
-        (run(new_api, "translation").status_code, 409, "annotate part on a new paper"),
         (run(api, "everything").status_code, 422, "unknown action"),
         (client.get(f"{new_api}/pdf").status_code, 409, "pdf of a new paper"),
     ]
     for got, want, name in cases:
         if got != want:
             failures.append(f"server: {name}: expected {want}, got {got}")
+    fresh = str(src / "inbox" / "fresh.pdf")
+    prep = f"stub internal/prepare.sh --ensure -n {fresh}"   # every job prepares first; no step needs the digest
     for url, action, expected in [
-        (new_api, "all", ["stub digest.sh -n " + str(src / "inbox" / "fresh.pdf"), "stub annotate.sh -n "]),
-        (api, "figures", [f"stub annotate.sh -n {root / 'Demo (2024)'} --only figures"]),
+        (new_api, "translation", [prep, f"stub annotate.sh -n {fresh} --only translation"]),
+        (new_api, "all", [prep, f"stub digest.sh -n {fresh}", f"stub annotate.sh -n {fresh}"]),
+        (api, "figures", ["stub internal/prepare.sh --ensure -n ", f"stub annotate.sh -n {root / 'Demo (2024)'} --only figures"]),
     ]:
         job = run(url, action).json()
         events = client.get(f"/api/jobs/{job.get('job_id')}/events").text

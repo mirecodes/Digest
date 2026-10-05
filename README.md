@@ -85,7 +85,7 @@ with Claude, so another model may need more fix-up rounds, but it cannot slip in
 |---|---|
 | Report and summary for new PDFs in `src/` (up to `max_papers`) | `scripts/digest.sh` |
 | …for one paper | `scripts/digest.sh -n "my-paper.pdf"` |
-| Reader annotations (translation, highlights, figure notes) | `scripts/annotate.sh -n "<paper folder name>"` |
+| Reader annotations (translation, highlights, figure notes); no summary needed | `scripts/annotate.sh -n "<paper folder name or src/ PDF>"` |
 | …only some parts | `scripts/annotate.sh -n "<name>" --only translation,highlights,figures` |
 | Start the reader | `scripts/viewer.sh` |
 | List all papers and their state | `scripts/internal/registry.sh` |
@@ -98,7 +98,9 @@ With Claude Code you can also type `/paper-digest` or `/paper-annotate -n NAME` 
 **Process ▾**:
 
 - **Run all**: summary (if missing), then every missing translation, highlight and figure-note step;
-- **Summary & report**, **Translation**, **Highlights**, **Figure notes**: one step each.
+- **Summary & report**, **Translation**, **Highlights**, **Figure notes**: one step each, in any order. None needs
+  another: every job first prepares the paper (copies the PDF, extracts the text, registers it), which is instant
+  when already done.
 
 Finished steps show a check mark. The job log streams under the row. **Open** shows the PDF and its translation side
 by side:

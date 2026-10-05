@@ -259,5 +259,14 @@
 - 시험(별도 스크립트): 첫 뷰어 → 두 번째 실행이 교체, SIGINT 후 포트 해제, 다른 프로그램이 점유 시 8766으로 이동하고 그 프로그램은 유지, 남은 `--dev` 뷰어 교체, `--dev` SIGTERM 후 포트·프로세스 0. selftest에 포트 선택 검사 추가.
 - health 엔드포인트가 없는 이전 버전 서버는 자동 식별이 안 된다 (이번 고아 프로세스는 수동 종료).
 
+### D4-9. 모든 처리 단계를 독립 실행, 준비(복사·등록)는 항상 먼저 — 사용자 요청
+- 문제: 아직 준비 안 된 src/ 논문은 Translation·Highlights·Figure notes가 비활성(서버 409)이어서 Summary를 먼저 돌려야 했다.
+- 변경:
+  - 리더의 모든 job 첫 단계 = `scripts/internal/prepare.sh --ensure -n <PDF>`: PDF 복사, 텍스트 추출, 레지스트리 등록 (AI 없음, 이미 준비됐으면 즉시 통과). `--ensure`는 digest PASS 논문도 exit 4 대신 `ready`/0으로 끝낸다.
+  - 그다음 요청한 단계만: Translation/Highlights/Figure notes = `annotate.sh --only`, Summary = `digest.sh`, Run all = (PASS 아니면) digest → 남은 주석. 새 논문의 409 제거, 메뉴 전부 활성 (막는 것은 이미 PASS인 Summary 재실행뿐).
+  - CLI도 같다: `annotate.sh -n NAME`에 준비 안 된 PDF(경로 또는 src/ 이름)를 주면 먼저 `prepare --ensure`. `papers.resolve_for_annotate`가 src/ 이름을 레지스트리로 폴더에 연결한다.
+  - skill: digest(보고서·요약·evidence)는 있으면 참고, 없어도 pages.md만으로 진행. evidence가 없을 때 피규어 해설의 본문 숫자는 `[p.N]`으로 인용 (verify가 페이지 범위를 검사, 화면에서는 페이지 이동 칩).
+- 하이라이트는 원래 evidence와 무관(D4-7)하고 번역은 pages.md·layout만 쓰므로, 실제로 digest에 기대던 것은 피규어 해설의 `[E#]` 인용뿐이었다.
+
 ### D4-6. 남은 Phase 4 항목
 - 피규어 bbox 수정(`PUT …/bbox`, figure_overrides.json)은 아직 구현하지 않았다. 요청 범위(보기)에 없었고, 실측 low_conf 0이라 급하지 않다.

@@ -4,7 +4,9 @@
 # translation per block (target_lang in configs/cfg.yaml), highlights, figure notes, then verify_annotations and
 # build_viewer.
 # Usage: scripts/annotate.sh [-n NAME] [--only PARTS]
-#   -n NAME:      one paper folder (path, folder name, path relative to the output root, or its PDF)
+#   -n NAME:      one paper: its folder (path, name, path relative to the output root) or its PDF (a path, or a src/
+#                 relative path / file name / stem). A PDF not prepared yet is prepared first (copy, extract,
+#                 register); the digest is not needed.
 #   --only PARTS: comma-separated subset of translation,highlights,figures (default: every part not complete yet)
 #   without -n:   digested papers (verify PASS) whose annotations are incomplete, at most max_papers per run.
 set -euo pipefail
@@ -27,6 +29,10 @@ if [ -n "$ONLY" ]; then
   done
 fi
 
+# file copy and registration come first, whatever is asked for
+if [ -n "$NAME" ] && ! "$PY" -m functions.papers -n "$NAME" >/dev/null 2>&1; then
+  "$PY" -m functions.prepare --ensure -n "$NAME"
+fi
 LIST="$("$PY" -m functions.papers ${NAME:+-n "$NAME"})"
 if [ -z "$LIST" ]; then
   echo "[annotate] nothing to annotate"

@@ -14,18 +14,21 @@ test("process menu runs one step and streams its log", async ({ page }) => {
   await expect(row.getByRole("button", { name: "Process" })).toBeEnabled();
 });
 
-test("a new src/ paper is listed once and can only be summarized or run in full", async ({ page }) => {
+test("a new src/ paper is listed once and any step runs on its own, preparing the paper first", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("[data-paper-id]")).toHaveCount(3); // demo, long paper, fresh.pdf; dup.pdf is the demo
   const row = page.locator("[data-paper-id]", { hasText: "fresh" });
   await expect(row).toContainText("New");
   await expect(row.getByRole("button", { name: "Open" })).toBeDisabled();
   await row.getByRole("button", { name: "Process" }).click();
-  await expect(row.getByRole("menuitem", { name: "Translation" })).toBeDisabled();
-  await row.getByRole("menuitem", { name: "Run all" }).click();
+  for (const name of ["Run all", "Summary & report", "Translation", "Highlights", "Figure notes"]) {
+    await expect(row.getByRole("menuitem", { name })).toBeEnabled();
+  }
+  await row.getByRole("menuitem", { name: "Highlights" }).click();
   const log = row.getByTestId("job-log");
-  await expect(log.locator("pre")).toContainText("stub digest.sh -n");
-  await expect(log.locator("pre")).toContainText("stub annotate.sh -n");
+  await expect(log.locator("pre")).toContainText("stub internal/prepare.sh --ensure -n");
+  await expect(log.locator("pre")).toContainText("--only highlights");
+  await expect(log.locator("pre")).not.toContainText("digest.sh");
   await expect(log.locator("[data-status]")).toHaveAttribute("data-status", "done", { timeout: 15_000 });
 });
 

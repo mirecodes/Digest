@@ -150,18 +150,22 @@ def needs_annotation(e: PaperEntry) -> bool:
 
 
 def resolve_for_annotate(name: str, root: Path | None = None) -> Path:
-    """A paper folder path, folder name, path relative to out_root, or a PDF already prepared (found by content).
-    Raises ValueError unless exactly one matches."""
+    """A paper folder path, folder name, path relative to out_root, or a prepared PDF (a path, or a src/ relative
+    path / file name / stem; found by content). Raises ValueError unless exactly one matches."""
+    from functions.prepare import SRC_DIR, find_pdf as find_src_pdf
+    from functions.registry import folder_for     # registry imports this module
+
     path = Path(name).expanduser()
     if (path / WORK_DIR / "pages.md").is_file():
         return path.resolve()
-    if path.is_file() and path.suffix.lower() == ".pdf":
-        from functions.registry import folder_for     # registry imports this module
-        folder = folder_for(path, root)
-        if folder is None:
-            raise ValueError(f"{name!r} is not prepared yet (run the digest first)")
-        return folder
     hits = [Path(e.folder) for e in scan(root) if name.rstrip("/") in (e.folder_rel, e.name)]
+    if not hits:
+        pdfs = find_src_pdf(name, SRC_DIR)   # an existing path, or src/ matches
+        if len(pdfs) == 1 and pdfs[0].suffix.lower() == ".pdf":
+            folder = folder_for(pdfs[0], root)
+            if folder is None:
+                raise ValueError(f"{name!r} is not prepared yet (scripts/internal/prepare.sh --ensure -n NAME)")
+            return folder
     if len(hits) != 1:
         raise ValueError(f"{name!r} matches {len(hits)} paper folders" + (f": {[str(h) for h in hits]}" if hits else ""))
     return hits[0]

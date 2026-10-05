@@ -393,7 +393,8 @@ def write_annotations(paper: Path, variant: str = "good") -> None:
         pages[2]["p2-b6"] = pages[2]["p2-b6"].replace("61.4", "육십일 점 사")
         highlights += ('\n### H98\n- category: result\n- page: 1\n- quote: "FooNet is the best model ever built by anyone"\n'
                        '\n### H99\n- category: novelty\n- page: 1\n- quote: "We propose FooNet"\n')
-        notes = notes.replace("[E2, p.2]", "[E9, p.2]").replace("[FIG: fig-p3-0]", "[FIG: fig-nope]")
+        notes = notes.replace("[E2, p.2]", "[E9, p.2]").replace("[FIG: fig-p3-0]", "[FIG: fig-nope]") \
+            .replace("How to read: boxes", "How to read [p.99]: boxes")
         notes += "\n### F4\n- figure: fig-p9-0\n- status: SKIP\n- reason: does not exist\n"
     # The fixture text is Korean; files and section names follow target_lang so the checks run under any config.
     lang = target_lang()

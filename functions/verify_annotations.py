@@ -32,6 +32,7 @@ PARTS = ("translation", "highlights", "figures")
 TR_NUMBER_RE = re.compile(r"\d+\.\d+\s*%?|\d+\s*%|\d+(?:\.\d+)?\s*×")   # decimals, percentages, multipliers
 REF_NUM_RE = re.compile(r"\[\d+(?:\s*[,–-]\s*\d+)*\]")
 FIG_RE = re.compile(r"\[FIG:\s*([^\]\s]+)\s*\]")
+PAGE_CITE_RE = re.compile(r"\[p\.\s*(\d+)\]")
 LENGTH_RATIO = (0.25, 3.0)
 # A reading map, not a marker pen: 8-24 key sentences (at most 3 per page for short papers), up to 6 on one page
 # (intro pages hold problem, prior work, assumption and contribution together).
@@ -127,7 +128,8 @@ def check_highlights(work: Path, doc, pages: dict, lang: str, errors: list, warn
     return items
 
 
-def _check_note_text(label: str, text: str, evidence: dict, fig_ids: set, errors: list, warnings: list) -> None:
+def _check_note_text(label: str, text: str, evidence: dict, fig_ids: set, n_pages: int, errors: list,
+                     warnings: list) -> None:
     for line in text.splitlines():
         cites = CITE_RE.findall(line)
         for eid, page in cites:
@@ -135,16 +137,21 @@ def _check_note_text(label: str, text: str, evidence: dict, fig_ids: set, errors
                 errors.append(f"{label}: unknown evidence {eid}")
             elif page and evidence[eid]["page"] and int(page) != evidence[eid]["page"]:
                 errors.append(f"{label}: page mismatch for {eid} (text p.{page}, evidence p.{evidence[eid]['page']})")
+        # [p.N]: a page of the paper, for papers annotated before (or without) the digest's evidence.md
+        page_cites = [int(p) for p in PAGE_CITE_RE.findall(line)]
+        for p in page_cites:
+            if not 1 <= p <= n_pages:
+                errors.append(f"{label}: [p.{p}] is outside the paper (1-{n_pages})")
         figs = FIG_RE.findall(line)
         for fid in figs:
             if fid not in fig_ids:
                 errors.append(f"{label}: [FIG: {fid}] refers to an unknown figure")
-        if NUMBER_RE.search(line) and not cites and not figs and not CALC_RE.search(line) \
+        if NUMBER_RE.search(line) and not cites and not page_cites and not figs and not CALC_RE.search(line) \
                 and not any(t in line for t in EXEMPT_TAGS):
             warnings.append(f"{label}: number without a marker -> {line.strip()[:90]}")
 
 
-def check_figure_notes(work: Path, figures: list[dict], evidence: dict, lang: str, errors: list,
+def check_figure_notes(work: Path, figures: list[dict], evidence: dict, lang: str, n_pages: int, errors: list,
                        warnings: list) -> dict[str, dict]:
     """{figure id: note} for valid F blocks."""
     md = read(work / "figure_notes.md")
@@ -179,7 +186,8 @@ def check_figure_notes(work: Path, figures: list[dict], evidence: dict, lang: st
             for key in ("tr", "en"):
                 if n[key]:
                     text = f"{n[key]['summary']}\n{n[key]['body_md']}"
-                    _check_note_text(f"{label} {lang if key == 'tr' else 'en'}", text, evidence, fig_ids, errors, warnings)
+                    _check_note_text(f"{label} {lang if key == 'tr' else 'en'}", text, evidence, fig_ids, n_pages,
+                                     errors, warnings)
         by_fig[n["figure"]] = n
     for f in figures:
         if f["id"] not in by_fig:
@@ -200,11 +208,12 @@ def verify_annotations(paper_dir: Path, parts=PARTS) -> dict:
               "notes": {}, "figures": figures, "lang": lang}
     if "translation" in parts:
         result["translation"] = check_translation(work, lang, errors, warnings)
+    pages = load_pages(work / "pages.md")
     if "highlights" in parts:
         doc = pymupdf.open(find_pdf(paper_dir))
-        result["highlights"] = check_highlights(work, doc, load_pages(work / "pages.md"), lang, errors, warnings)
+        result["highlights"] = check_highlights(work, doc, pages, lang, errors, warnings)
     if "figures" in parts:
-        result["notes"] = check_figure_notes(work, figures, evidence, lang, errors, warnings)
+        result["notes"] = check_figure_notes(work, figures, evidence, lang, len(pages), errors, warnings)
     result["present"] = bool(tr_files(work, lang)) or (work / "highlights.md").is_file() \
         or (work / "figure_notes.md").is_file()
     return result
