@@ -37,9 +37,17 @@ Set the backend in `configs/cfg.yaml`:
 agent:
   backend: claude    # claude | codex | gemini
   model: ""          # empty = the CLI's default; otherwise any model name that CLI accepts
+  effort: ""         # empty = the CLI's default; claude: low … max, codex: minimal … high (Gemini: none)
 ```
 
-To try another backend for a single run without editing the file, use `PAPER_AGENT=gemini scripts/digest.sh`.
+These are defaults. In the reader's library page, **Model** and **Effort** (above the paper list) choose them for the
+next Process runs, e.g. `claude-opus-5-5` with `high` for a hard paper, or `claude-sonnet-5-5` with `medium`. The
+model box suggests Claude's current models; for Codex or Gemini type any model name your account can use (or list
+yours under `agent.models` in `cfg.yaml`). If your plan or key cannot use a model, the job log shows the CLI's
+error. The choice is remembered in your browser.
+
+For a single terminal run without editing the file, use environment variables:
+`PAPER_AGENT=gemini scripts/digest.sh`, or `PAPER_AGENT_MODEL=claude-opus-5-5 PAPER_AGENT_EFFORT=high scripts/annotate.sh -n "<name>"`.
 
 | | Claude | ChatGPT / OpenAI | Gemini |
 |---|---|---|---|
@@ -48,7 +56,8 @@ To try another backend for a single run without editing the file, use `PAPER_AGE
 | Log in with a subscription | run `claude` once and log in (Claude Pro/Max) | `codex login` (ChatGPT Plus/Pro) | run `gemini` once, "Login with Google" |
 | …or with an API key | `export ANTHROPIC_API_KEY=...` | `printenv OPENAI_API_KEY \| codex login --with-api-key` | `export GEMINI_API_KEY=...` |
 | `backend:` | `claude` | `codex` | `gemini` |
-| Model examples | `sonnet`, `opus` | see `codex --help` / OpenAI docs | see Gemini CLI docs |
+| Model examples | `claude-opus-5-5`, `claude-sonnet-5-5` (or `opus`, `sonnet`) | see `codex --help` / OpenAI docs | see Gemini CLI docs |
+| Effort | `--effort` low, medium, high, xhigh, max | `model_reasoning_effort` minimal, low, medium, high | not supported |
 
 Keys belong in your shell profile (e.g. `~/.zshrc`) or the CLI's own login store, **never in `cfg.yaml`**, which is
 committed. API-key usage is billed per token by your provider, and a full paper (report, translation and figure notes)
@@ -118,7 +127,7 @@ by side:
 |---|---|---|
 | `out_dir` | where paper folders go (absolute, `~`, or relative to the project), e.g. an Obsidian vault folder | `out/` |
 | `target_lang` | language of reader translations and figure notes (`ko`, `ja`, `de`, …); each language keeps its own files | `ko` |
-| `agent.backend` / `agent.model` | AI coding agent and model, see above | `claude` / CLI default |
+| `agent.backend` / `agent.model` / `agent.effort` | AI coding agent, model and effort, see above (the reader can change model and effort per run) | `claude` / CLI default / CLI default |
 | `title_words` | words kept from a long title in the folder name | 5 |
 | `max_papers` | papers per run without `-n` (0 = no limit) | 5 |
 | `viewer.host` / `viewer.port` | reader address | `127.0.0.1` / `8765` |

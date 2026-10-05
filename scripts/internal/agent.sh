@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run one project skill headless with the configured coding agent (configs/cfg.yaml `agent:`, or $PAPER_AGENT).
 # Usage: scripts/internal/agent.sh [--dry-run] SKILL 'SKILL ARGUMENTS'   e.g. agent.sh paper-digest '-n "rsl/x.pdf"'
-#        scripts/internal/agent.sh --check     backend, model, CLI version and how to log in
+#        scripts/internal/agent.sh --check     backend, model, effort, CLI version and how to log in
+#   one-off model / effort: PAPER_AGENT_MODEL=claude-opus-5-5 PAPER_AGENT_EFFORT=high scripts/digest.sh
 #   --dry-run: print the command instead of running it (no CLI needed)
 # Backends (each CLI does its own login / API key handling; this script never sees a key):
 #   claude  Claude Code `claude -p`   skill as /SKILL; edits auto-accepted, Bash only for scripts/internal/*
@@ -19,8 +20,9 @@ case "${1:-}" in
   --check) CHECK=1; shift ;;
 esac
 
-BACKEND="$("$PY" -c 'from functions.papers import agent_cfg; print(agent_cfg()["backend"])')"
-MODEL="$("$PY" -c 'from functions.papers import agent_cfg; print(agent_cfg()["model"])')"
+{ read -r BACKEND; read -r MODEL; read -r EFFORT; } < <("$PY" -c '
+from functions.papers import agent_cfg
+a = agent_cfg(); print(a["backend"]); print(a["model"]); print(a["effort"])')
 case "$BACKEND" in
   claude) INSTALL="npm install -g @anthropic-ai/claude-code"
           LOGIN="run 'claude' once and log in (Claude subscription or Console account), or export ANTHROPIC_API_KEY" ;;
@@ -31,13 +33,17 @@ case "$BACKEND" in
   *) echo "[agent] ERROR: unknown backend '$BACKEND' (agent.backend in configs/cfg.yaml: claude | codex | gemini)" >&2
      exit 2 ;;
 esac
+if [ -n "$EFFORT" ] && [ "$BACKEND" = gemini ]; then
+  echo "[agent] note: the Gemini CLI has no effort setting; ignoring effort '$EFFORT'" >&2
+  EFFORT=""
+fi
 
 if [ "$DRY" -eq 0 ] && ! command -v "$BACKEND" >/dev/null; then
   echo "[agent] ERROR: the $BACKEND CLI is not installed. Install: $INSTALL; then $LOGIN" >&2
   exit 127
 fi
 if [ "$CHECK" -eq 1 ]; then
-  echo "[agent] backend: $BACKEND   model: ${MODEL:-(CLI default)}   cli: $(command -v "$BACKEND") $("$BACKEND" --version 2>&1 | head -1)"
+  echo "[agent] backend: $BACKEND   model: ${MODEL:-(CLI default)}   effort: ${EFFORT:-(CLI default)}   cli: $(command -v "$BACKEND") $("$BACKEND" --version 2>&1 | head -1)"
   echo "[agent] login: $LOGIN"
   exit 0
 fi
@@ -60,11 +66,12 @@ run() {
 }
 case "$BACKEND" in
   claude)
-    run claude -p "/$SKILL $ARGS" ${MODEL:+--model "$MODEL"} --add-dir "$OUT" \
+    run claude -p "/$SKILL $ARGS" ${MODEL:+--model "$MODEL"} ${EFFORT:+--effort "$EFFORT"} --add-dir "$OUT" \
       --permission-mode acceptEdits --allowedTools "Bash(scripts/internal/*)" "Read" ;;
   codex)
     run codex exec --skip-git-repo-check --sandbox workspace-write -c approval_policy=never \
-      -c sandbox_workspace_write.network_access=true --add-dir "$OUT" ${MODEL:+-m "$MODEL"} "$PROMPT" ;;
+      -c sandbox_workspace_write.network_access=true --add-dir "$OUT" ${MODEL:+-m "$MODEL"} \
+      ${EFFORT:+-c "model_reasoning_effort=$EFFORT"} "$PROMPT" ;;
   gemini)
     run gemini -p "$PROMPT" --approval-mode auto_edit --policy configs/gemini-policy.toml \
       --include-directories "$OUT" --skip-trust ${MODEL:+-m "$MODEL"} ;;

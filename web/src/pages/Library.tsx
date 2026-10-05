@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { jobEventsUrl, listPapers, startJob } from "../api/client";
+import { getConfig, jobEventsUrl, listPapers, startJob } from "../api/client";
 import { navigate } from "../App";
 import { t, type Key } from "../i18n";
 import { CheckIcon, ChevronDownIcon } from "../reader/icons";
-import type { Action, PaperEntry } from "../types";
+import type { Action, AgentChoice, AgentConfig, PaperEntry } from "../types";
 
 type JobView = { status: string; action: Action; lines: string[] };
 const LOG_LINES = 200;
@@ -91,6 +91,54 @@ function ProcessMenu({ p, busy, onRun }: { p: PaperEntry; busy: boolean; onRun: 
   );
 }
 
+const choiceKey = (backend: string) => `paper-viewer:agent:${backend}`;
+function loadChoice(backend: string): AgentChoice {
+  try {
+    return { model: "", effort: "", ...JSON.parse(localStorage.getItem(choiceKey(backend)) ?? "{}") };
+  } catch {
+    return { model: "", effort: "" };
+  }
+}
+
+/** Model and effort for the next jobs; empty = cfg.yaml. Remembered per backend in this browser. */
+function AgentPicker({ cfg, choice, onChange }: { cfg: AgentConfig; choice: AgentChoice; onChange: (c: AgentChoice) => void }) {
+  const set = (c: AgentChoice) => {
+    onChange(c);
+    try {
+      localStorage.setItem(choiceKey(cfg.backend), JSON.stringify(c));
+    } catch {
+      /* private window: not remembered */
+    }
+  };
+  const fallback = (v: string) => `${t("agent_default")} (${v || t("agent_cli_default")})`;
+  return (
+    <div className="agent-picker" title={t("agent_hint")}>
+      <span className="chip">{cfg.backend}</span>
+      <label>
+        {t("agent_model")}
+        <input
+          list="agent-models"
+          value={choice.model}
+          placeholder={fallback(cfg.model)}
+          onChange={(e) => set({ ...choice, model: e.target.value.trim() })}
+        />
+        <datalist id="agent-models">
+          {cfg.models.map((m) => <option key={m} value={m} />)}
+        </datalist>
+      </label>
+      {cfg.efforts.length > 0 && (
+        <label>
+          {t("agent_effort")}
+          <select value={choice.effort} onChange={(e) => set({ ...choice, effort: e.target.value })}>
+            <option value="">{fallback(cfg.effort)}</option>
+            {cfg.efforts.map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </label>
+      )}
+    </div>
+  );
+}
+
 function JobLog({ job }: { job: JobView }) {
   const ref = useRef<HTMLPreElement>(null);
   useEffect(() => {
@@ -114,10 +162,18 @@ export default function Library() {
   const [query, setQuery] = useState("");
   const [jobs, setJobs] = useState<Record<string, JobView>>({});
   const sources = useRef<EventSource[]>([]);
+  const [agent, setAgent] = useState<AgentConfig | null>(null);
+  const [choice, setChoice] = useState<AgentChoice>({ model: "", effort: "" });
 
   const refresh = useCallback(() => listPapers().then(setPapers, (e) => setError(String(e.message ?? e))), []);
   useEffect(() => {
     refresh();
+    getConfig().then((c) => {
+      if (!c.agent) return; // older server
+      setAgent(c.agent);
+      const saved = loadChoice(c.agent.backend);
+      setChoice({ model: saved.model, effort: c.agent.efforts.includes(saved.effort) ? saved.effort : "" });
+    }, () => {});
     return () => sources.current.forEach((s) => s.close());
   }, [refresh]);
 
@@ -125,7 +181,7 @@ export default function Library() {
     const update = (fn: (j: JobView) => JobView) =>
       setJobs((all) => ({ ...all, [id]: fn(all[id] ?? { status: "queued", action, lines: [] }) }));
     try {
-      const job = await startJob(id, action);
+      const job = await startJob(id, action, choice);
       update(() => ({ status: job.status, action: job.action, lines: [] }));
       const es = new EventSource(jobEventsUrl(job.job_id));
       sources.current.push(es);
@@ -157,7 +213,8 @@ export default function Library() {
       <header className="library-head">
         <h1>{t("library")}</h1>
         <p>{t("library_sub")}</p>
-        <input placeholder={t("search_papers")} value={query} onChange={(e) => setQuery(e.target.value)} aria-label={t("search_papers")} />
+        <input className="paper-search" placeholder={t("search_papers")} value={query} onChange={(e) => setQuery(e.target.value)} aria-label={t("search_papers")} />
+        {agent && <AgentPicker cfg={agent} choice={choice} onChange={setChoice} />}
       </header>
       {error && <p className="error">{t("load_failed")}: {error}</p>}
       {papers === null && !error && <p className="empty-state">{t("loading")}</p>}

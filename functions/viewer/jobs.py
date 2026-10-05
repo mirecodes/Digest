@@ -33,6 +33,7 @@ class Job:
     action: str
     steps: list[Step]
     log_dir: Path
+    env: dict[str, str] = field(default_factory=dict)   # extra environment for the steps (agent model / effort)
     status: str = "queued"          # queued | running | done | failed
     lines: list[str] = field(default_factory=list)
     returncode: int | None = None
@@ -50,13 +51,13 @@ class Jobs:
         self._lock = threading.Lock()
         self._worker: threading.Thread | None = None
 
-    def submit(self, key: str, action: str, steps: list[Step], log_dir: Path) -> Job:
+    def submit(self, key: str, action: str, steps: list[Step], log_dir: Path, env: dict[str, str] | None = None) -> Job:
         """Queue a job for the paper, or return its job that is still queued or running (whatever its action)."""
         with self._lock:
             for job in self._jobs.values():
                 if job.key == key and not job.finished:
                     return job
-            job = Job(id=uuid.uuid4().hex[:12], key=key, action=action, steps=steps, log_dir=log_dir)
+            job = Job(id=uuid.uuid4().hex[:12], key=key, action=action, steps=steps, log_dir=log_dir, env=env or {})
             self._jobs[job.id] = job
             self._queue.put(job)
             if self._worker is None or not self._worker.is_alive():
@@ -80,10 +81,13 @@ class Jobs:
         job.log_dir.mkdir(parents=True, exist_ok=True)
         job.status = "running"
         with open(job.log_dir / f"{time.strftime('%Y%m%d-%H%M%S')}-{job.action}.log", "w", encoding="utf-8") as log:
+            if job.env:
+                self._emit(job, log, "[job] " + "  ".join(f"{k}={v}" for k, v in sorted(job.env.items())))
             for i, (script, args) in enumerate(job.steps, 1):
                 self._emit(job, log, f"[job] step {i}/{len(job.steps)}: {script} {shlex.join(args)}")
                 try:
-                    job.proc = subprocess.Popen(command(script, args), cwd=ROOT, stdin=subprocess.DEVNULL,
+                    job.proc = subprocess.Popen(command(script, args), cwd=ROOT, env={**os.environ, **job.env},
+                                                stdin=subprocess.DEVNULL,
                                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
                     for line in job.proc.stdout:
                         self._emit(job, log, line)

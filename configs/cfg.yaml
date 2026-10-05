@@ -11,11 +11,17 @@ target_lang: ko
 # Coding agent that reads the papers and writes reports, translations and notes (see README.md, "Choose your AI").
 #   claude: Claude Code   codex: Codex CLI (ChatGPT / OpenAI)   gemini: Gemini CLI (Google)
 # Log in with the CLI itself (subscription or API key); no key goes in this file.
-# model: empty = the CLI's default; otherwise any model name that CLI accepts.
-# One-off override without editing this file: PAPER_AGENT=gemini scripts/digest.sh
+# model: empty = the CLI's default; otherwise any model name that CLI accepts (e.g. claude-opus-5-5).
+# effort: empty = the CLI's default; claude: low | medium | high | xhigh | max, codex: minimal | low | medium | high
+#   (the Gemini CLI has no effort setting).
+# models: optional list of suggestions for the viewer's model picker (default: Claude's current models).
+# The viewer's library page picks model and effort per run; these are the defaults.
+# One-off override without editing this file:
+#   PAPER_AGENT=gemini PAPER_AGENT_MODEL=... PAPER_AGENT_EFFORT=high scripts/digest.sh
 agent:
   backend: claude
   model: ""
+  effort: ""
 
 # Max words kept from a long title in the paper name (stopwords dropped).
 title_words: 5

@@ -118,11 +118,12 @@ def check_naming(failures: list) -> None:
 
 
 AGENT_EXPECT = {   # backend -> fragments its command line must contain (scripts/internal/agent.sh --dry-run)
-    "claude": ["claude -p /paper-digest", "--allowedTools Bash\\(scripts/internal/\\*\\)", "--add-dir"],
+    "claude": ["claude -p /paper-digest", "--allowedTools Bash\\(scripts/internal/\\*\\)", "--add-dir",
+               "--model m-1", "--effort high"],
     "codex": ["codex exec", "--sandbox workspace-write", "approval_policy=never", "network_access=true", "--add-dir",
-              "SKILL.md"],
+              "SKILL.md", "-m m-1", "model_reasoning_effort=high"],
     "gemini": ["gemini -p", "--approval-mode auto_edit", "--policy configs/gemini-policy.toml", "--include-directories",
-               "SKILL.md"],
+               "SKILL.md", "-m m-1"],   # the Gemini CLI has no effort flag: agent.sh drops it
 }
 
 
@@ -131,7 +132,8 @@ def check_agent(failures: list) -> None:
     script = Path(__file__).resolve().parent.parent / "scripts" / "internal" / "agent.sh"
     for backend, fragments in AGENT_EXPECT.items():
         r = subprocess.run([str(script), "--dry-run", "paper-digest", '-n "x.pdf"'], capture_output=True, text=True,
-                           env={**os.environ, "PAPER_AGENT": backend})
+                           env={**os.environ, "PAPER_AGENT": backend, "PAPER_AGENT_MODEL": "m-1",
+                                "PAPER_AGENT_EFFORT": "high"})
         missing = [f for f in fragments if f not in r.stdout]
         if r.returncode != 0 or missing:
             failures.append(f"agent {backend}: rc={r.returncode}, missing {missing} in {r.stdout[:200]!r} {r.stderr[:200]!r}")
@@ -399,9 +401,12 @@ def check_server(root: Path, src: Path, failures: list) -> None:
     # processing jobs with a stub instead of the scripts (no Claude call); it echoes the script and its arguments
     os.environ["PAPER_VIEWER_JOB_CMD"] = f'"{sys.executable}" -c "import sys; print(\'stub\', *sys.argv[1:])"'
     new_api = f"/api/papers/{new[0]['id']}"
-    run = lambda url, action: client.post(f"{url}/run", json={"action": action})
+    os.environ["PAPER_AGENT"] = "claude"      # effort levels below are Claude's, whatever cfg.yaml selects
+    run = lambda url, action, **agent: client.post(f"{url}/run", json={"action": action, **agent})
     cases = [
         (run(api, "everything").status_code, 422, "unknown action"),
+        (run(api, "figures", model="x; rm -rf ~").status_code, 400, "model name with shell characters"),
+        (run(api, "figures", effort="turbo").status_code, 400, "unknown effort"),
         (client.get(f"{new_api}/pdf").status_code, 409, "pdf of a new paper"),
     ]
     for got, want, name in cases:
@@ -409,12 +414,14 @@ def check_server(root: Path, src: Path, failures: list) -> None:
             failures.append(f"server: {name}: expected {want}, got {got}")
     fresh = str(src / "inbox" / "fresh.pdf")
     prep = f"stub internal/prepare.sh --ensure -n {fresh}"   # every job prepares first; no step needs the digest
-    for url, action, expected in [
-        (new_api, "translation", [prep, f"stub annotate.sh -n {fresh} --only translation"]),
-        (new_api, "all", [prep, f"stub digest.sh -n {fresh}", f"stub annotate.sh -n {fresh}"]),
-        (api, "figures", ["stub internal/prepare.sh --ensure -n ", f"stub annotate.sh -n {root / 'Demo (2024)'} --only figures"]),
+    for url, action, agent, expected in [
+        (new_api, "translation", {}, [prep, f"stub annotate.sh -n {fresh} --only translation"]),
+        (new_api, "all", {}, [prep, f"stub digest.sh -n {fresh}", f"stub annotate.sh -n {fresh}"]),
+        (api, "figures", {"model": "claude-opus-5-5", "effort": "high"},
+         ["[job] PAPER_AGENT_EFFORT=high  PAPER_AGENT_MODEL=claude-opus-5-5", "stub internal/prepare.sh --ensure -n ",
+          f"stub annotate.sh -n {root / 'Demo (2024)'} --only figures"]),
     ]:
-        job = run(url, action).json()
+        job = run(url, action, **agent).json()
         events = client.get(f"/api/jobs/{job.get('job_id')}/events").text
         if any(e not in events for e in expected) or \
                 'event: done\ndata: {"status": "done", "returncode": 0}' not in events:

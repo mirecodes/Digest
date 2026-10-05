@@ -19,6 +19,7 @@ export default defineConfig({
       PAPER_VIEWER_SRC: process.env.PAPER_VIEWER_SRC ?? "",
       PAPER_VIEWER_LLM: "fake",
       PYTHONPATH: process.env.ROOT ?? "",
+      PAPER_AGENT: "claude", // the model picker test expects Claude's models and effort levels
       // stub for scripts/digest.sh and annotate.sh: echoes the script and its arguments, no Claude call
       PAPER_VIEWER_JOB_CMD: `"${process.env.PY}" -c "import sys, time; print('stub', *sys.argv[1:]); time.sleep(0.5); print('finished')"`,
     },

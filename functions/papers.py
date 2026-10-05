@@ -25,15 +25,32 @@ VIEWER_DEFAULTS = {
 }
 VERIFY_RE = re.compile(r"verify:\s*(PASS|FAIL)")
 AGENTS = ("claude", "codex", "gemini")
+# Model suggestions for the viewer's picker (any name the CLI accepts works; agent.models in cfg.yaml replaces them)
+# and the effort levels each CLI takes (claude --effort, codex model_reasoning_effort; Gemini CLI has no flag).
+AGENT_MODELS = {
+    "claude": ["claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-haiku-4-5-20251001"],
+    "codex": [],
+    "gemini": [],
+}
+AGENT_EFFORTS = {
+    "claude": ["low", "medium", "high", "xhigh", "max"],
+    "codex": ["minimal", "low", "medium", "high"],
+    "gemini": [],
+}
+MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,99}$")
 
 
 def agent_cfg(cfg: dict | None = None) -> dict:
-    """The `agent:` section of configs/cfg.yaml: backend (claude | codex | gemini) and model ("" = CLI default).
-    $PAPER_AGENT overrides the backend for one run."""
+    """The `agent:` section of configs/cfg.yaml: backend (claude | codex | gemini), model and effort ("" = CLI
+    default), plus the model suggestions and effort levels of that backend. For one run, $PAPER_AGENT overrides
+    the backend, $PAPER_AGENT_MODEL the model and $PAPER_AGENT_EFFORT the effort."""
     cfg = load_config() if cfg is None else cfg
-    agent = {"backend": "claude", "model": "", **(cfg.get("agent") or {})}
-    agent["backend"] = str(os.environ.get("PAPER_AGENT") or agent["backend"]).strip().lower()
-    agent["model"] = str(agent["model"] or "").strip()
+    agent = {"backend": "claude", "model": "", "effort": "", **(cfg.get("agent") or {})}
+    for key, env in (("backend", "PAPER_AGENT"), ("model", "PAPER_AGENT_MODEL"), ("effort", "PAPER_AGENT_EFFORT")):
+        agent[key] = str(os.environ.get(env) or agent[key] or "").strip()
+    agent["backend"] = agent["backend"].lower()
+    agent["models"] = [str(m) for m in agent.get("models") or AGENT_MODELS.get(agent["backend"], [])]
+    agent["efforts"] = AGENT_EFFORTS.get(agent["backend"], [])
     return agent
 
 

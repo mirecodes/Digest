@@ -1,5 +1,5 @@
 import { t } from "../i18n";
-import type { Action, PaperEntry, ViewerData } from "../types";
+import type { Action, AgentChoice, Config, PaperEntry, ViewerData } from "../types";
 
 async function errorOf(res: Response): Promise<Error> {
   // 405: a server started before this route existed answers through the GET-only SPA catch-all
@@ -16,11 +16,12 @@ async function getJson<T>(url: string): Promise<T> {
 
 export const listPapers = () => getJson<PaperEntry[]>("/api/papers");
 export const loadViewer = (id: string) => getJson<ViewerData>(`/api/papers/${id}/viewer.json`);
-export async function startJob(id: string, action: Action): Promise<{ job_id: string; status: string; action: Action }> {
+export const getConfig = () => getJson<Config>("/api/config");
+export async function startJob(id: string, action: Action, agent: AgentChoice): Promise<{ job_id: string; status: string; action: Action }> {
   const res = await fetch(`/api/papers/${id}/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ action, ...agent }),
   });
   if (!res.ok) throw await errorOf(res);
   return res.json();

@@ -115,3 +115,19 @@ export interface PaperEntry {
 }
 
 export type Action = "all" | "digest" | "translation" | "highlights" | "figures";
+
+/** The coding agent from configs/cfg.yaml; models are suggestions, efforts the levels its CLI takes. */
+export interface AgentConfig {
+  backend: string;
+  model: string; // "" = the CLI default
+  effort: string;
+  models: string[];
+  efforts: string[];
+}
+export interface Config {
+  target_lang: string;
+  llm_backend: string;
+  agent: AgentConfig;
+}
+/** Per-run choice; "" falls back to cfg.yaml. */
+export type AgentChoice = { model: string; effort: string };

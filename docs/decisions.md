@@ -268,5 +268,11 @@
   - skill: digest(보고서·요약·evidence)는 있으면 참고, 없어도 pages.md만으로 진행. evidence가 없을 때 피규어 해설의 본문 숫자는 `[p.N]`으로 인용 (verify가 페이지 범위를 검사, 화면에서는 페이지 이동 칩).
 - 하이라이트는 원래 evidence와 무관(D4-7)하고 번역은 pages.md·layout만 쓰므로, 실제로 digest에 기대던 것은 피규어 해설의 `[E#]` 인용뿐이었다.
 
+### D4-10. 실행마다 모델·effort 선택 — 사용자 요청
+- 라이브러리 상단에 Model(입력 + datalist 제안)과 Effort(select) 선택기. 고른 값은 이후 Process 실행에 쓰이고, 브라우저 localStorage에 backend별로 기억한다. 비우면 cfg.yaml의 `agent.model` / `agent.effort` (그것도 비면 CLI 기본값).
+- 전달: `POST …/run {action, model, effort}` → job 환경변수 `PAPER_AGENT_MODEL` / `PAPER_AGENT_EFFORT` → `agent.sh`가 `claude --model … --effort …`, `codex -m … -c model_reasoning_effort=…`, `gemini -m …`로 변환 (Gemini CLI는 effort 옵션이 없어 무시하고 알림). 터미널에서도 같은 환경변수로 1회 지정.
+- 모델 목록은 코드의 제안값(Claude: opus 5.5, sonnet 5.5, fable 5.1, haiku 4.5 ID)이고, Codex/Gemini는 모델명이 자주 바뀌어 제안 없이 직접 입력. `agent.models`로 목록을 바꿀 수 있다. CLI가 계정에서 쓸 수 있는 모델을 조회하는 공식 방법이 없어, "내 계정에서 되는 모델"은 실행 시 CLI가 판단한다 (안 되면 job 로그에 CLI 오류).
+- 서버는 모델명을 `MODEL_RE`(영숫자 . _ : / @ -)로, effort를 backend의 허용 목록으로 검사한다 (명령줄로 가는 값). job 로그 첫 줄에 선택값을 남긴다.
+
 ### D4-6. 남은 Phase 4 항목
 - 피규어 bbox 수정(`PUT …/bbox`, figure_overrides.json)은 아직 구현하지 않았다. 요청 범위(보기)에 없었고, 실측 low_conf 0이라 급하지 않다.

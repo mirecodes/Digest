@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from functions.build_viewer import ensure_viewer, viewer_root
-from functions.papers import PaperEntry, find_pdf, is_evicted, viewer_cfg
+from functions.papers import MODEL_RE, PaperEntry, agent_cfg, find_pdf, is_evicted, viewer_cfg
 from functions.prepare import SRC_DIR
 from functions.registry import library
 from functions.verify import WORK_DIR
@@ -105,7 +105,9 @@ def health():
 @app.get("/api/config")
 def config():
     cfg = viewer_cfg()
-    return {k: cfg[k] for k in ("target_lang", "llm_backend")}
+    agent = agent_cfg()
+    return {**{k: cfg[k] for k in ("target_lang", "llm_backend")},
+            "agent": {k: agent[k] for k in ("backend", "model", "effort", "models", "efforts")}}
 
 
 @app.get("/api/papers/{pid}/viewer.json")
@@ -156,6 +158,23 @@ ANNOTATE_PARTS = ("translation", "highlights", "figures")
 
 class RunRequest(BaseModel):
     action: Literal["all", "digest", "translation", "highlights", "figures"]
+    model: str = ""             # "" = agent.model in cfg.yaml
+    effort: str = ""            # "" = agent.effort in cfg.yaml
+
+
+def _agent_env(req: RunRequest) -> dict[str, str]:
+    """The run's model / effort as the environment scripts/internal/agent.sh reads; both reach a command line."""
+    env = {}
+    if req.model:
+        if not MODEL_RE.match(req.model):
+            raise HTTPException(400, f"invalid model name {req.model!r}")
+        env["PAPER_AGENT_MODEL"] = req.model
+    if req.effort:
+        efforts = agent_cfg()["efforts"]
+        if req.effort not in efforts:
+            raise HTTPException(400, f"effort must be one of {efforts}" if efforts else "this backend has no effort setting")
+        env["PAPER_AGENT_EFFORT"] = req.effort
+    return env
 
 
 def _steps(e: PaperEntry, action: str) -> list[Step]:
@@ -182,7 +201,7 @@ def run(pid: str, req: RunRequest):
     if req.action == "digest" and e.digest_verify == "PASS":
         raise HTTPException(409, "the summary is already done (verify PASS)")
     log_dir = Path(e.folder) / WORK_DIR / "viewer" / "jobs" if e.folder else viewer_root() / ".paper-jobs"
-    job = JOBS.submit(pid, req.action, _steps(e, req.action), log_dir)
+    job = JOBS.submit(pid, req.action, _steps(e, req.action), log_dir, _agent_env(req))
     return {"job_id": job.id, "status": job.status, "action": job.action}
 
 

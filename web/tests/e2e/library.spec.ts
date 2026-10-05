@@ -32,6 +32,23 @@ test("a new src/ paper is listed once and any step runs on its own, preparing th
   await expect(log.locator("[data-status]")).toHaveAttribute("data-status", "done", { timeout: 15_000 });
 });
 
+test("the chosen model and effort reach the job", async ({ page }) => {
+  await page.goto("/");
+  const model = page.getByLabel("Model");
+  await expect(model).toHaveAttribute("list", "agent-models");
+  await expect(page.locator("#agent-models option[value='claude-sonnet-5-5']")).toHaveCount(1);
+  await model.fill("claude-sonnet-5-5");
+  await page.getByLabel("Effort").selectOption("high");
+  const row = page.locator("[data-paper-id]", { hasText: "Long Paper (2024)" });
+  await row.getByRole("button", { name: "Process" }).click();
+  await row.getByRole("menuitem", { name: "Translation" }).click();
+  const log = row.getByTestId("job-log");
+  await expect(log.locator("pre")).toContainText("PAPER_AGENT_EFFORT=high  PAPER_AGENT_MODEL=claude-sonnet-5-5");
+  await expect(log.locator("[data-status]")).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await page.reload();
+  await expect(page.getByLabel("Model")).toHaveValue("claude-sonnet-5-5"); // remembered in this browser
+});
+
 test("annotated paper shows the bundled translation and status chips", async ({ page }) => {
   await page.goto("/");
   const row = page.locator("[data-paper-id]", { hasText: "Demo (2024)" });
