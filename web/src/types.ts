@@ -146,5 +146,13 @@ export interface JobInfo {
   started?: number | null;
   ended?: number | null;
 }
+/** The server preparing new src/ PDFs in the background (copy into the output folder, extract the text). */
+export interface PrepareState {
+  running: boolean;
+  done: number;
+  total: number;
+  current: string; // file name
+  started: number | null; // epoch seconds
+}
 /** Per-run choice; "" falls back to cfg.yaml. */
 export type AgentChoice = { model: string; effort: string };

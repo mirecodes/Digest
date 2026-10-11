@@ -15,6 +15,7 @@ export const FileIcon = () => <Svg d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a
 export const PreparedIcon = () => <Svg d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 13l2 2 4-4" />;
 export const TranslateIcon = () => <Svg d="M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6" />;
 export const FigureIcon = () => <Svg d="M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15 9h.01" />;
+export const SelectModeIcon = () => <Svg d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l3 3 5-6" />;
 export const LockIcon = () => <Svg d="M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4" />;
 export const UnlockIcon = () => <Svg d="M6 11h12v10H6zM8 11V7a4 4 0 0 1 7.5-2" />;
 export const SidebarIcon = () => <Svg d="M4 5h16v14H4zM9 5v14" />;

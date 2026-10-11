@@ -300,5 +300,12 @@
 - 진행 바(검색창 아래): job에 `submitted / started / ended`(epoch 초)를 더해 `/api/jobs`와 jobs.json에 싣는다. 한 "실행"은 queued/running job 전부와, 그중 가장 이른 제출 시각 뒤에 끝난 job이다(그래서 새로고침이나 재시작 뒤에도 서버 데이터만으로 계산된다). 남은 시간은 이번 실행에서 성공한 job의 평균 소요 시간 × 남은 작업량 ÷ min(parallel, 남은 job 수)다. 첫 job이 끝나기 전에는 "Estimating…"을 보인다. 단계(요약·번역)가 달라도 평균 하나만 쓰는 대략값이다. 계산은 `web/src/pages/progress.ts`에 있고 unit test로 확인한다.
 - 하이라이트: 실제 결과(RMA)는 문장 하나하나는 맞지만, 카테고리별로 따로 골라 기여–방법–결과의 연결이 없었고, 본문 중간(방법 세부, 실험)이 비어 PDF 위에서는 흩어져 보였다. skill 6단계를 4 pass로 다시 정의했다. (1) highlights.md 맨 위에 `## Reading map`(Thesis, Problem, Gap, 기여별 `C#: … | how: … | shown by: …`, Scope, Insight, Limits)을 먼저 쓴다. (2) map 줄마다 찾을 섹션과 cue phrase 표를 따라 한 문장에 앵커한다. how는 방법 섹션, shown by는 실험 섹션에서 찾고, abstract는 최대 2개다. (3) 필요·구체·자기완결·비중복 네 가지 기준으로 거른다. (4) 메모만 순서대로 읽어 초록이 되는지 감사한다. H 블록에 `claim: C#`을 달고, verify_annotations는 C#마다 contribution·method·result 하이라이트가 없으면 WARN을 낸다. viewer는 Reading map과 claim을 무시하므로 viewer.json 스키마는 그대로다. 기존 highlights.md는 그대로 유효하다. 새 방식으로 바꾸려면 `Process ▸ Annotation`이나 `annotate.sh --only highlights`로 다시 만든다.
 
+### D4-15. 시작 시 새 PDF 바로 준비, 선택 모드, 상단 Process 메뉴 — 사용자 요청
+- 뷰어가 뜨거나 목록을 다시 읽을 때 새 src/ PDF를 백그라운드(`Preparer`, jobs.py)에서 하나씩 `prepare.sh --ensure`로 준비한다. 이름 변환, 출력 폴더로 복사, 텍스트 추출까지다. PDF마다 뷰어 실행당 한 번만 시도한다(스캔본은 New로 남는다). 상태는 `GET /api/prepare`로 제공한다. 1초 넘게 걸리면 진행 바 위에 "Moving new PDFs to the output folder · n / N"(현재 파일명)을 보이고, 끝나면 사라진다. 하나 끝날 때마다 목록을 다시 읽는다.
+- prepare.py는 출력 root의 `.paper-prepare.lock`(flock)으로 한 번에 하나만 돈다. 준비 중인 PDF에 job이 돌면 job의 prepare 단계는 잠금을 기다렸다가 "already prepared"로 지나간다. 병렬 job 두 개가 새 PDF를 동시에 준비하며 registry를 덮어쓰던 기존 경합도 함께 막힌다. 준비 중에는 폴더 이동(relocate)도 하지 않는다.
+- 사고와 방지: 처음 구현 때 selftest가 stub을 설정하기 전에 `/api/papers`를 불렀다. 그 바람에 백그라운드 준비가 실제 prepare.sh를 실행했고, 테스트 PDF `fresh`가 cfg.yaml의 out_dir(실제 vault)에 만들어졌다. prepare.sh는 `PAPER_VIEWER_OUT`을 모르기 때문이다. 고친 점은 두 가지다. selftest는 서버를 띄우기 전에 stub을 설정한다. 서버는 `PAPER_VIEWER_OUT`이 설정됐는데 stub이 없으면 백그라운드 준비를 하지 않는다.
+- 라이브러리 폭 960 → 1200px. 원형 선택과 Select all은 평소에 숨기고, 목록 우측 상단 **Select**를 누르면 나타난다. 다시 누르면(Done) 선택이 풀린다.
+- 행마다 있던 Process 메뉴를 없앴다. 선택 모드의 상단 **Process ▾** 메뉴가 선택한 논문에 바로 실행한다(step select + "Run on selected" 두 번 누르던 것을 한 번으로 줄였다). 각 항목 옆 숫자는 선택한 논문 중 그 단계가 남은 수이고, 0이면 체크 표시와 함께 비활성이다. 한 편만 처리할 때도 Select → 체크 → Process를 거친다.
+
 ### D4-6. 남은 Phase 4 항목
 - 피규어 bbox 수정(`PUT …/bbox`, figure_overrides.json)은 아직 구현하지 않았다. 요청 범위(보기)에 없었고, 실측 low_conf 0이라 급하지 않다.

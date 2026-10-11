@@ -30,8 +30,9 @@ cp ~/Downloads/some-paper.pdf src/   # subfolders in src/ are kept in the output
    changed (e.g. after `git pull`);
 2. checks that the AI agent CLI is installed (`scripts/internal/agent.sh --check`; it does not check the login).
    Without it you can still read, but **Process** fails, so install and log in first (next section);
-3. starts the reader. In the library, tick papers, a folder or **Select all**, pick a step and click
-   **Run on selected**; or use **Process ▾** on one paper. Ctrl+C stops it.
+3. starts the reader. New PDFs in `src/` are moved into the output folder right away (renamed, text extracted). To
+   process papers, click **Select** above the list, tick papers, a folder or **Select all**, and pick a step in
+   **Process ▾**. Ctrl+C stops it.
 
 Options go to `scripts/viewer.sh`: `./run.sh --port 8800`, `./run.sh --no-open`.
 
@@ -122,8 +123,14 @@ With Claude Code you can also type `/paper-digest` or `/paper-annotate -n NAME` 
 
 ### Reader
 
-`scripts/viewer.sh` lists every paper as a tree that follows `src/`: processed ones and new PDFs (marked **New**).
-Click a folder to collapse it; the browser remembers which folders are closed. Each paper has **Process ▾**:
+`scripts/viewer.sh` lists every paper as a tree that follows `src/`. On start it moves every new PDF into the
+output folder (named, copied, text extracted), one after another; when that takes more than a moment a bar under
+the search shows how far it got. A PDF it cannot prepare (e.g. scanned) stays marked **New**. Click a folder to
+collapse it; the browser remembers which folders are closed.
+
+To process papers, click **Select** at the top right of the list. Circles appear on the right: one per paper, one
+per folder (every paper inside it), and **Select all**. Selected rows turn light blue. Then pick a step in
+**Process ▾** (the number next to each step is how many selected papers still need it):
 
 - **Run all**: summary (if missing), then the missing translation and annotation;
 - **Summary**: evidence and the verified report;
@@ -131,16 +138,12 @@ Click a folder to collapse it; the browser remembers which folders are closed. E
 - **Annotation**: highlights and figure notes.
 
 Each step runs on its own, in any order: every job first prepares the paper (copies the PDF, extracts the text,
-registers it), which is instant when already done. Finished steps show a check mark, and the job log streams under
-the row.
+registers it), which is instant when already done. The papers queue in list order, `parallel` of them run at once,
+papers whose step is already done are skipped, and each job's log streams under its row. **Done** leaves select mode.
 
 The four icons on each row turn from grey to blue as the paper gets there: copied into the output folder,
 translated, highlighted, figures explained (hover for the counts). While jobs run, a bar under the search shows how
 many of the queued papers are done and about how long the rest will take (estimated from the jobs that finished).
-
-To process many papers at once, click the circles on the right: one per paper, one per folder (every paper inside
-it), and **Select all** at the top. Selected rows turn light blue. Then pick a step and click **Run on selected**. The
-papers queue in list order, `parallel` of them run at once, and papers whose step is already done are skipped.
 
 If a run is cut off, its log shows **Failed** (the agent stopped, e.g. the connection to the AI dropped) or **Stopped
 while running** (the viewer was closed or crashed; this shows up the next time it starts). Click **Resume**: it runs

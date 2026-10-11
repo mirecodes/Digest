@@ -1,5 +1,5 @@
 import { t } from "../i18n";
-import type { Action, AgentChoice, Config, JobInfo, PaperEntry, ViewerData } from "../types";
+import type { Action, AgentChoice, Config, JobInfo, PaperEntry, PrepareState, ViewerData } from "../types";
 
 async function errorOf(res: Response): Promise<Error> {
   // 405: a server started before this route existed answers through the GET-only SPA catch-all
@@ -28,5 +28,6 @@ export async function startJob(id: string, action: Action, agent: AgentChoice, r
   return res.json();
 }
 export const listJobs = () => getJson<JobInfo[]>("/api/jobs");
+export const getPrepare = () => getJson<PrepareState>("/api/prepare");
 export const cropUrl = (id: string, page: number, bbox: number[]) =>
   `/api/papers/${id}/crop?page=${page}&bbox=${bbox.map((v) => v.toFixed(2)).join(",")}`;

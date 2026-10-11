@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { getConfig, listJobs, listPapers, startJob } from "../api/client";
+import { getConfig, getPrepare, listJobs, listPapers, startJob } from "../api/client";
 import { navigate } from "../App";
 import { t, type Key } from "../i18n";
-import { CheckIcon, ChevronDownIcon, FigureIcon, FileIcon, FolderIcon, HighlightIcon, PreparedIcon, TranslateIcon } from "../reader/icons";
-import type { Action, AgentChoice, AgentConfig, JobInfo, PaperEntry } from "../types";
+import {
+  CheckIcon, ChevronDownIcon, FigureIcon, FileIcon, FolderIcon, HighlightIcon, PreparedIcon, SelectModeIcon, TranslateIcon,
+} from "../reader/icons";
+import type { Action, AgentChoice, AgentConfig, JobInfo, PaperEntry, PrepareState } from "../types";
 import { runProgress } from "./progress";
 
 const POLL_MS = 1000;
@@ -65,19 +67,17 @@ const ACTIONS: { action: Action; label: Key; hint: Key }[] = [
 
 const complete = (c: { done: number; total: number }) => c.total > 0 && c.done === c.total;
 
-/** Whether an action is already done for the paper, and why it cannot run (null = it can). */
-function actionState(p: PaperEntry, a: Action): { done: boolean; blocked: Key | null } {
+/** Whether an action has nothing left to do for the paper (such papers are skipped; a passed summary is never redone).
+ * Every action stands alone otherwise: the job prepares the paper first. */
+function isDone(p: PaperEntry, a: Action): boolean {
   const digested = p.digest_verify === "PASS";
   const annotated = p.highlights > 0 && complete(p.figure_notes);
-  const done = {
+  return {
     digest: digested,
     translation: complete(p.translation),
     annotation: annotated,
     all: digested && complete(p.translation) && annotated,
   }[a];
-  // every action stands alone (the job prepares the paper first); only a passed summary is not redone
-  const blocked: Key | null = a === "digest" && digested ? "already_done" : null;
-  return { done, blocked };
 }
 
 /** Four line icons, grey until the part is done, then blue; the counts are in the tooltip. */
@@ -103,32 +103,56 @@ const etaText = (s: number | null) =>
   : s < 60 ? t("eta_soon")
   : `${t("eta_about")} ${s >= 3600 ? `${Math.floor(s / 3600)} h ` : ""}${Math.round((s % 3600) / 60)} min ${t("eta_left")}`;
 
-/** Bar under the search while jobs are queued or running: papers done of the run, and the time left. */
-function Progress({ jobs, parallel }: { jobs: JobInfo[]; parallel: number }) {
+function Bar({ label, text, right, done, total }: { label: string; text: ReactNode; right: ReactNode; done: number; total: number }) {
+  return (
+    <div className="run-progress">
+      <div className="run-progress-text">
+        <span className="num">{text}</span>
+        <span>{right}</span>
+      </div>
+      <div className="bar" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+        <span style={{ width: `${(100 * done) / total}%` }} />
+      </div>
+    </div>
+  );
+}
+
+// the preparing bar shows only when it takes a while
+const PREPARE_SHOW_AFTER_S = 1;
+
+/** Bars under the search: new PDFs being moved into the output folder, then the jobs of the current run (papers done,
+ * time left). Each disappears when its work is done. */
+function Progress({ jobs, parallel, prep }: { jobs: JobInfo[]; parallel: number; prep: PrepareState | null }) {
   const [now, setNow] = useState(() => Date.now() / 1000);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now() / 1000), POLL_MS);
     return () => clearInterval(timer);
   }, []);
   const run = runProgress(jobs, parallel || 1, now);
-  if (!run) return null;
+  const preparing = prep?.running && prep.total > 0 && now - (prep.started ?? now) >= PREPARE_SHOW_AFTER_S;
   return (
-    <div className="run-progress">
-      <div className="run-progress-text">
-        <span className="num">
-          {t("progress")} · {run.done} / {run.total} {t("progress_papers")}
-          {run.failed > 0 && <span className="bad"> · {run.failed} {t("progress_failed")}</span>}
-        </span>
-        <span>{etaText(run.eta)}</span>
-      </div>
-      <div className="bar" role="progressbar" aria-label={t("progress")} aria-valuemin={0} aria-valuemax={run.total} aria-valuenow={run.done}>
-        <span style={{ width: `${(100 * run.done) / run.total}%` }} />
-      </div>
-    </div>
+    <>
+      {preparing && (
+        <Bar label={t("preparing")} text={`${t("preparing")} · ${prep.done} / ${prep.total}`} right={prep.current} done={prep.done} total={prep.total} />
+      )}
+      {run && (
+        <Bar
+          label={t("progress")}
+          text={<>
+            {t("progress")} · {run.done} / {run.total} {t("progress_papers")}
+            {run.failed > 0 && <span className="bad"> · {run.failed} {t("progress_failed")}</span>}
+          </>}
+          right={etaText(run.eta)}
+          done={run.done}
+          total={run.total}
+        />
+      )}
+    </>
   );
 }
 
-function ProcessMenu({ p, busy, onRun }: { p: PaperEntry; busy: boolean; onRun: (a: Action) => void }) {
+/** The step to run on the selected papers; each item shows how many of them it has work for (a check: none). */
+function ProcessMenu({ chosen, onRun }: { chosen: PaperEntry[]; onRun: (a: Action) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -144,27 +168,28 @@ function ProcessMenu({ p, busy, onRun }: { p: PaperEntry; busy: boolean; onRun: 
   }, [open]);
   return (
     <div className="menu-wrap" ref={ref}>
-      <button aria-haspopup="menu" aria-expanded={open} disabled={p.status === "evicted" || busy} onClick={() => setOpen((o) => !o)} title={t("process_hint")}>
+      <button className="primary" aria-haspopup="menu" aria-expanded={open} disabled={chosen.length === 0} onClick={() => setOpen((o) => !o)} title={t("process_hint")}>
         {t("process")} <ChevronDownIcon />
       </button>
       {open && (
         <div className="menu" role="menu">
           {ACTIONS.map(({ action, label, hint }) => {
-            const { done, blocked } = actionState(p, action);
+            const todo = chosen.filter((p) => p.status !== "evicted" && !isDone(p, action)).length;
             return (
               <button
                 key={action}
                 role="menuitem"
                 data-action={action}
-                disabled={blocked !== null}
-                title={t(blocked ?? hint)}
+                disabled={todo === 0}
+                title={t(todo ? hint : "already_done")}
                 onClick={() => {
                   setOpen(false);
                   onRun(action);
                 }}
               >
                 <span>{t(label)}</span>
-                {done && <span className="done" aria-label={t("already_done")}><CheckIcon /></span>}
+                {todo ? <span className="todo num" title={t("batch_todo")}>{todo}</span>
+                  : <span className="done" aria-label={t("already_done")}><CheckIcon /></span>}
               </button>
             );
           })}
@@ -265,8 +290,10 @@ export default function Library() {
   const [parallel, setParallel] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
-  const [batchAction, setBatchAction] = useState<Action>("all");
+  // the select circles, Select all and the Process menu show only in select mode
+  const [selecting, setSelecting] = useState(false);
   const [note, setNote] = useState("");
+  const [prep, setPrep] = useState<PrepareState | null>(null);
 
   const refresh = useCallback(() => listPapers().then(setPapers, (e) => setError(String(e.message ?? e))), []);
   useEffect(() => {
@@ -298,12 +325,27 @@ export default function Library() {
         }));
         if (ended.length) refresh();
       }, () => {});
-    tick();
-    const timer = setInterval(tick, POLL_MS);
+    // new src/ PDFs the server is moving into the output folder: the list reloads as each one is done
+    let lastPrep = "";
+    const tickPrep = () =>
+      getPrepare().then((s) => {
+        const key = `${s.running}:${s.done}:${s.started}`;
+        if (key === lastPrep) return;
+        if (lastPrep) refresh(); // a PDF was prepared, or the batch ended
+        lastPrep = key;
+        setPrep(s);
+      }, () => {});
+    const tickAll = () => {
+      tick();
+      tickPrep();
+    };
+    tickAll();
+    const timer = setInterval(tickAll, POLL_MS);
     return () => clearInterval(timer);
   }, [refresh]);
 
   const busy = (p: PaperEntry) => !!jobs[jobKey(p)] && !finished(jobs[jobKey(p)]);
+  const chosen = (papers ?? []).filter((p) => selected.has(p.id));
   const run = async (p: PaperEntry, action: Action, agentChoice = choice, resume = false) => {
     const key = jobKey(p);
     try {
@@ -317,10 +359,9 @@ export default function Library() {
   const resume = (p: PaperEntry, j: JobInfo) => run(p, j.action, { model: j.model, effort: j.effort }, true);
 
   /** Queue the action for every selected paper in list order, skipping the ones it has nothing to do for. */
-  const runSelected = async () => {
-    const chosen = (papers ?? []).filter((p) => selected.has(p.id));
-    const todo = chosen.filter((p) => p.status !== "evicted" && !busy(p) && !actionState(p, batchAction).done);
-    for (const p of todo) await run(p, batchAction);
+  const runSelected = async (action: Action) => {
+    const todo = chosen.filter((p) => p.status !== "evicted" && !busy(p) && !isDone(p, action));
+    for (const p of todo) await run(p, action);
     setNote(`${todo.length} ${t("batch_started")}` + (chosen.length > todo.length ? ` · ${chosen.length - todo.length} ${t("batch_skipped")}` : ""));
   };
 
@@ -356,7 +397,7 @@ export default function Library() {
   const depthStyle = (depth: number) => ({ "--depth": depth }) as CSSProperties;
   const renderPaper = (p: PaperEntry, depth: number) => {
     const job = jobs[jobKey(p)];
-    const on = selected.has(p.id);
+    const on = selecting && selected.has(p.id);
     return (
       <div key={p.id} className="tree-item" role="treeitem" aria-selected={on} data-paper-id={p.id} style={depthStyle(depth)}>
         <div className={`tree-row paper-row${on ? " selected" : ""}`}>
@@ -367,9 +408,8 @@ export default function Library() {
           {p.status === "evicted" && <span className="chip warn">{t("evicted")}</span>}
           <span className="pages num">{p.status !== "new" && `${p.num_pages}p`}</span>
           <Marks p={p} />
-          <ProcessMenu p={p} busy={busy(p)} onRun={(a) => run(p, a)} />
           <button className="primary" disabled={p.status !== "ok"} onClick={() => navigate(`/r/${p.id}`)}>{t("open")}</button>
-          <SelectCircle state={on} label={`${t("select")} ${p.name}`} onChange={(v) => select([p.id], v)} />
+          {selecting && <SelectCircle state={on} label={`${t("select")} ${p.name}`} onChange={(v) => select([p.id], v)} />}
         </div>
         {job && <JobLog job={job} onResume={() => resume(p, job)} />}
       </div>
@@ -385,14 +425,14 @@ export default function Library() {
         const open = !!q || !collapsed.has(d.path);
         return (
           <div key={d.path} className="tree-item" role="treeitem" aria-expanded={open} aria-selected={state === true} data-folder={d.path} style={depthStyle(depth)}>
-            <div className={`tree-row folder-row${state === true ? " selected" : ""}`}>
+            <div className={`tree-row folder-row${selecting && state === true ? " selected" : ""}`}>
               <button className="twisty" aria-expanded={open} onClick={() => toggleFolder(d.path)}>
                 <ChevronDownIcon />
                 <FolderIcon />
                 <span className="folder-name">{d.name}</span>
                 <span className="count num">{ids.length}</span>
               </button>
-              <SelectCircle state={state} label={`${t("select")} ${d.name}`} onChange={(v) => select(ids, v)} />
+              {selecting && <SelectCircle state={state} label={`${t("select")} ${d.name}`} onChange={(v) => select(ids, v)} />}
             </div>
             {open && <div role="group">{renderFolder(d, depth + 1)}</div>}
           </div>
@@ -402,14 +442,18 @@ export default function Library() {
   );
 
   const visibleIds = visible.map((p) => p.id);
-  const nSelected = (papers ?? []).filter((p) => selected.has(p.id)).length;
+  const toggleSelecting = () => {
+    setSelecting((on) => !on);
+    setSelected(new Set()); // leaving select mode drops the selection; entering starts empty
+    setNote("");
+  };
   return (
     <div className="library">
       <header className="library-head">
         <h1>{t("library")}</h1>
         <p>{t("library_sub")}</p>
         <input className="paper-search" placeholder={t("search_papers")} value={query} onChange={(e) => setQuery(e.target.value)} aria-label={t("search_papers")} />
-        <Progress jobs={Object.values(jobs)} parallel={parallel} />
+        <Progress jobs={Object.values(jobs)} parallel={parallel} prep={prep} />
         {agent && <AgentPicker cfg={agent} choice={choice} onChange={setChoice} />}
       </header>
       {error && <p className="error">{t("load_failed")}: {error}</p>}
@@ -418,15 +462,20 @@ export default function Library() {
       {visible.length > 0 && (
         <div className="tree">
           <div className="batch-bar" title={parallel ? `${t("batch_hint")} ${parallel}` : undefined}>
-            <span className="num">{nSelected} {t("selected")}</span>
+            <span className="num">{selecting ? `${chosen.length} ${t("selected")}` : `${(papers ?? []).length} ${t("papers_count")}`}</span>
             {note && <span role="status">{note}</span>}
             <span className="spacer" />
-            <select value={batchAction} aria-label={t("batch_action")} onChange={(e) => setBatchAction(e.target.value as Action)}>
-              {ACTIONS.map(({ action, label }) => <option key={action} value={action}>{t(label)}</option>)}
-            </select>
-            <button disabled={nSelected === 0} onClick={runSelected}>{t("run_selected")}</button>
-            <span className="select-all-label" aria-hidden="true">{t("select_all")}</span>
-            <SelectCircle state={selState(visibleIds)} label={t("select_all")} onChange={(v) => select(visibleIds, v)} />
+            {selecting && (
+              <>
+                <ProcessMenu chosen={chosen} onRun={runSelected} />
+                <span className="select-all-label" aria-hidden="true">{t("select_all")}</span>
+                <SelectCircle state={selState(visibleIds)} label={t("select_all")} onChange={(v) => select(visibleIds, v)} />
+              </>
+            )}
+            <button className="select-mode" aria-pressed={selecting} onClick={toggleSelecting} title={t("select_mode_hint")}>
+              <SelectModeIcon />
+              {t(selecting ? "select_done" : "select")}
+            </button>
           </div>
           <div role="tree" aria-multiselectable="true" aria-label={t("library")}>{renderFolder(tree, 0)}</div>
         </div>

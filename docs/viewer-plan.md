@@ -701,7 +701,8 @@ function mapRef(y: number, from: PaneLayout, to: PaneLayout): number {
 | DELETE | `/papers/{id}/chats/{tid}` | 스레드 삭제 (사용자 요청 시만) |
 | GET / PUT | `/papers/{id}/annotations` | 사용자 상태 (PUT 전체 교체, 버전 필드로 낙관적 잠금 → 충돌 409) |
 | POST | `/papers/{id}/annotate` | 전처리 job 등록 → `{job_id}` |
-| GET | `/jobs` | 이번·지난 서버 실행의 job `{id, paper(sha), action, status, lines, model, effort}` — 라이브러리가 1초마다 폴링 (D4-12, D4-13) |
+| GET | `/jobs` | 이번·지난 서버 실행의 job `{id, paper(sha), action, status, lines, model, effort, submitted, started, ended}` — 라이브러리가 1초마다 폴링 (D4-12, D4-13, D4-14) |
+| GET | `/prepare` | 새 src/ PDF 백그라운드 준비 상태 `{running, done, total, current, started}` (D4-15) |
 | POST | `/papers/{id}/export/notes` | `<name> - notes.md` 생성 → `{path}` |
 | POST | `/papers/{id}/export/pdf` | `<name> - annotated.pdf` 생성 → `{path}` |
 | GET | `/config` | 프론트에 필요한 설정 (target_lang, 백엔드 종류, 카테고리 기본값) |

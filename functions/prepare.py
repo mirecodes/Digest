@@ -24,6 +24,7 @@ Exit codes: 0 ok, 1 nothing selected / input error.
   4 already digested (verify PASS; --force redoes it).
 """
 import argparse
+import fcntl
 import shutil
 import sys
 from pathlib import Path
@@ -40,6 +41,7 @@ SRC_DIR = ROOT / "src"
 DEFAULT_OUT = ROOT / "out"
 EXIT_EXISTS = 3
 EXIT_DONE = 4
+LOCK_NAME = ".paper-prepare.lock"
 
 
 def load_config() -> dict:
@@ -147,11 +149,19 @@ def main() -> int:
     parser.add_argument("--offline", action="store_true", help="skip arXiv/Crossref, use PDF metadata only")
     args = parser.parse_args()
 
-    from functions.registry import done_sources, sync
-
     cfg = load_config()
     root = out_root(cfg)
     root.mkdir(parents=True, exist_ok=True)
+    # one prepare at a time per output root (parallel viewer jobs, the viewer's own preparing, the CLI): each reads the
+    # registry first and writes it last, and two runs on one new PDF would both make its folder
+    with open(root / LOCK_NAME, "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _run(args, cfg, root)
+
+
+def _run(args, cfg: dict, root: Path) -> int:
+    from functions.registry import done_sources, sync
+
     papers, _ = sync(root)
     pdfs = select(args.name, int(cfg.get("max_papers") or 0), SRC_DIR, done_sources(papers))
     if args.name and len(pdfs) > 1:

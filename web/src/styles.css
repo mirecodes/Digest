@@ -96,7 +96,7 @@ input:focus { outline: 2px solid var(--accent); outline-offset: 0; background: v
 .chip.warn { background: rgba(255, 149, 0, 0.14); color: #b36800; }
 
 /* ---- library: centered lane, hairline list rows */
-.library { max-width: 960px; margin: 0 auto; padding: 48px 20px; }
+.library { max-width: 1200px; margin: 0 auto; padding: 48px 20px; }
 .library-head h1 { font-size: 32px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 8px; }
 .library-head p { color: var(--text-muted); font-size: 15px; margin: 0 0 24px; }
 .library-head .paper-search { width: 100%; padding: 14px 20px; font-size: 15px; }
@@ -112,7 +112,8 @@ input:focus { outline: 2px solid var(--accent); outline-offset: 0; background: v
 .tree {
   --indent: 16px; --gutter: 12px;
   margin-top: 24px; padding-bottom: 6px; background: var(--bg);
-  border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-card); overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-card);
+  /* no overflow clip: the Process menu opens below the bar even over a short list */
 }
 .batch-bar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px var(--gutter) 10px 20px;
@@ -124,6 +125,13 @@ input:focus { outline: 2px solid var(--accent); outline-offset: 0; background: v
   border: none; border-radius: var(--radius-btn); background: var(--surface);
 }
 .batch-bar .select-all-label { margin-left: 4px; }
+.batch-bar button { padding: 7px 12px; font-size: 13px; }
+/* select mode toggle: quiet until on */
+.batch-bar .select-mode { gap: 6px; background: transparent; color: var(--text-secondary); }
+.batch-bar .select-mode:hover { background: var(--surface); }
+.batch-bar .select-mode[aria-pressed="true"] { background: var(--surface-2); color: var(--accent-hover); }
+.batch-bar .select-mode svg { width: 16px; height: 16px; }
+.menu .todo { font-size: 12px; color: var(--text-dim); }
 .tree-row {
   display: flex; align-items: center; gap: 6px; min-height: 40px;
   padding: 4px var(--gutter) 4px calc(var(--gutter) + var(--depth) * var(--indent));

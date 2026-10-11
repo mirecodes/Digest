@@ -186,4 +186,36 @@ class Jobs:
                 job.proc.terminate()
 
 
+class Preparer:
+    """Prepares new src/ PDFs (name, copy into the output tree, extract the text) one after another in the
+    background, so they show up as papers without a Process run. Each PDF is tried once per viewer run (a scanned one
+    stays new). prepare.py locks the output root, so a job preparing the same PDF meanwhile just waits."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._tried: set[str] = set()
+        self.state = {"running": False, "done": 0, "total": 0, "current": "", "started": None}
+
+    def start(self, pdfs: dict[str, str]) -> None:
+        """pdfs: sha -> src/ path. No-op while a batch is running (the next rescan brings the newer ones)."""
+        with self._lock:
+            todo = [path for sha, path in pdfs.items() if sha not in self._tried]
+            if self.state["running"] or not todo:
+                return
+            self._tried.update(pdfs)
+            self.state = {"running": True, "done": 0, "total": len(todo), "current": "", "started": time.time()}
+        threading.Thread(target=self._run, args=(todo,), daemon=True).start()
+
+    def _run(self, pdfs: list[str]) -> None:
+        try:
+            for pdf in pdfs:
+                self.state["current"] = Path(pdf).name
+                # output goes to the viewer's terminal ([prepare] lines)
+                subprocess.run(command("internal/prepare.sh", ["--ensure", "-n", pdf]), cwd=ROOT, stdin=subprocess.DEVNULL)
+                self.state["done"] += 1
+        finally:
+            self.state.update(running=False, current="")
+
+
 JOBS = Jobs()
+PREPARER = Preparer()

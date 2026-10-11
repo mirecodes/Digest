@@ -23,7 +23,7 @@ from functions.papers import MODEL_RE, PaperEntry, agent_cfg, find_pdf, is_evict
 from functions.prepare import SRC_DIR
 from functions.registry import library
 from functions.verify import WORK_DIR
-from functions.viewer.jobs import JOBS, Step, parallel
+from functions.viewer.jobs import JOBS, PREPARER, Step, parallel
 
 DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
 PDFJS = Path(__file__).resolve().parents[2] / "web" / "node_modules" / "pdfjs-dist"
@@ -37,6 +37,7 @@ NO_BUILD_HTML = """<!doctype html><meta charset="utf-8"><title>Paper Viewer</tit
 @asynccontextmanager
 async def _lifespan(_: FastAPI):
     JOBS.restore(viewer_root() / ".paper-jobs" / "jobs.json")     # jobs cut off by the last stop come back
+    _rescan()                                                       # starts preparing the new src/ PDFs
     yield
     JOBS.shutdown()
 
@@ -56,10 +57,14 @@ def viewer_src() -> Path:
 
 def _rescan() -> list[PaperEntry]:
     """Output folders and new src/ PDFs, via the registry (which this also brings up to date). While no job runs,
-    output folders are first moved to mirror src/ (a move under a running job would break it)."""
-    entries = library(viewer_root(), viewer_src(), move=not JOBS.busy())
+    output folders are first moved to mirror src/ (a move under a running job would break it). New PDFs are then
+    prepared in the background (PREPARER)."""
+    entries = library(viewer_root(), viewer_src(), move=not JOBS.busy() and not PREPARER.state["running"])
     _papers.clear()
     _papers.update({e.id: e for e in entries})
+    # prepare.sh writes into cfg.yaml's out_dir: with another root (PAPER_VIEWER_OUT, tests) only a stub may run
+    if not os.environ.get("PAPER_VIEWER_OUT") or os.environ.get("PAPER_VIEWER_JOB_CMD"):
+        PREPARER.start({e.sha: e.source for e in entries if e.status == "new" and e.sha and e.source})
     return entries
 
 
@@ -211,6 +216,12 @@ def run(pid: str, req: RunRequest):
 
 
 JOB_LOG_LINES = 200
+
+
+@app.get("/api/prepare")
+def prepare_state():
+    """The background preparing of new src/ PDFs: {running, done, total, current (file name), started (epoch s)}."""
+    return PREPARER.state
 
 
 @app.get("/api/jobs")

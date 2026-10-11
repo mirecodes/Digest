@@ -386,6 +386,9 @@ def check_server(root: Path, src: Path, failures: list) -> None:
     os.environ["PAPER_VIEWER_OUT"] = str(root)
     os.environ["PAPER_VIEWER_SRC"] = str(src)
     os.environ["PAPER_VIEWER_LLM"] = "fake"
+    # a stub instead of the scripts (no Claude call, nothing written to the configured out_dir); set before the first
+    # /api/papers, which already starts preparing the new PDF in the background. It echoes the script and its arguments.
+    os.environ["PAPER_VIEWER_JOB_CMD"] = f'"{sys.executable}" -c "import sys; print(\'stub\', *sys.argv[1:])"'
     from fastapi.testclient import TestClient
     from functions.viewer.server import app
 
@@ -417,8 +420,7 @@ def check_server(root: Path, src: Path, failures: list) -> None:
         if got != want:
             failures.append(f"server: {name}: expected {want}, got {got}")
 
-    # processing jobs with a stub instead of the scripts (no Claude call); it echoes the script and its arguments
-    os.environ["PAPER_VIEWER_JOB_CMD"] = f'"{sys.executable}" -c "import sys; print(\'stub\', *sys.argv[1:])"'
+    # processing jobs run the stub
     new_api = f"/api/papers/{new[0]['id']}"
     os.environ["PAPER_AGENT"] = "claude"      # effort levels below are Claude's, whatever cfg.yaml selects
     run = lambda url, action, **agent: client.post(f"{url}/run", json={"action": action, **agent})
@@ -457,6 +459,35 @@ def check_server(root: Path, src: Path, failures: list) -> None:
                 job.get("model") != agent.get("model", "") or None in times or times != sorted(times):
             failures.append(f"server: {action} job unexpected: {job.get('status')} {log[:400]!r}")
     check_job_restore(root / "restore", failures)
+    check_preparer(root / "preparer", failures)
+
+
+def check_preparer(tmp: Path, failures: list) -> None:
+    """New src/ PDFs are prepared one after another in the background, each once per viewer run."""
+    from functions.viewer.jobs import Preparer
+    tmp.mkdir()
+    calls = tmp / "calls.txt"
+    stub = os.environ["PAPER_VIEWER_JOB_CMD"]
+    os.environ["PAPER_VIEWER_JOB_CMD"] = \
+        f'"{sys.executable}" -c "import sys; open(sys.argv[1], \'a\').write(\' \'.join(sys.argv[2:]) + \'\\n\')" "{calls}"'
+    try:
+        prep = Preparer()
+        prep.start({"s1": "a.pdf", "s2": "b.pdf"})
+        for _ in range(100):
+            if not prep.state["running"]:
+                break
+            time.sleep(0.05)
+        prep.start({"s1": "a.pdf", "s3": "c.pdf"})      # a.pdf was tried already
+        for _ in range(100):
+            if not prep.state["running"]:
+                break
+            time.sleep(0.05)
+    finally:
+        os.environ["PAPER_VIEWER_JOB_CMD"] = stub
+    got = calls.read_text().splitlines() if calls.is_file() else []
+    want = [f"internal/prepare.sh --ensure -n {p}" for p in ("a.pdf", "b.pdf", "c.pdf")]
+    if got != want or prep.state["done"] != 1 or prep.state["total"] != 1:
+        failures.append(f"preparer: expected {want} and the last batch 1/1, got {got} {prep.state}")
 
 
 def check_job_restore(tmp: Path, failures: list) -> None:
