@@ -1,5 +1,5 @@
 import { t } from "../i18n";
-import type { Action, AgentChoice, Config, PaperEntry, ViewerData } from "../types";
+import type { Action, AgentChoice, Config, JobInfo, PaperEntry, ViewerData } from "../types";
 
 async function errorOf(res: Response): Promise<Error> {
   // 405: a server started before this route existed answers through the GET-only SPA catch-all
@@ -17,15 +17,16 @@ async function getJson<T>(url: string): Promise<T> {
 export const listPapers = () => getJson<PaperEntry[]>("/api/papers");
 export const loadViewer = (id: string) => getJson<ViewerData>(`/api/papers/${id}/viewer.json`);
 export const getConfig = () => getJson<Config>("/api/config");
-export async function startJob(id: string, action: Action, agent: AgentChoice): Promise<{ job_id: string; status: string; action: Action }> {
+/** resume: keep the work an interrupted or failed run already finished. */
+export async function startJob(id: string, action: Action, agent: AgentChoice, resume = false): Promise<{ job_id: string; status: string; action: Action }> {
   const res = await fetch(`/api/papers/${id}/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, ...agent }),
+    body: JSON.stringify({ action, ...agent, resume }),
   });
   if (!res.ok) throw await errorOf(res);
   return res.json();
 }
-export const jobEventsUrl = (jobId: string) => `/api/jobs/${jobId}/events`;
+export const listJobs = () => getJson<JobInfo[]>("/api/jobs");
 export const cropUrl = (id: string, page: number, bbox: number[]) =>
   `/api/papers/${id}/crop?page=${page}&bbox=${bbox.map((v) => v.toFixed(2)).join(",")}`;

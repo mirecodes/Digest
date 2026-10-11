@@ -112,9 +112,11 @@ export interface PaperEntry {
   figure_notes: { done: number; total: number };
   status: "ok" | "evicted" | "new"; // new: a src/ PDF that is not prepared yet
   source: string | null;
+  sha: string | null; // PDF content hash: jobs refer to the paper by it
 }
 
-export type Action = "all" | "digest" | "translation" | "highlights" | "figures";
+// annotation = highlights + figure notes
+export type Action = "all" | "digest" | "translation" | "annotation";
 
 /** The coding agent from configs/cfg.yaml; models are suggestions, efforts the levels its CLI takes. */
 export interface AgentConfig {
@@ -127,7 +129,22 @@ export interface AgentConfig {
 export interface Config {
   target_lang: string;
   llm_backend: string;
+  parallel: number; // jobs that run at once (configs/cfg.yaml)
   agent: AgentConfig;
+}
+/** A processing job (GET /api/jobs); paper is the paper's sha (or id). interrupted: the viewer stopped meanwhile. */
+export interface JobInfo {
+  id: string;
+  paper: string;
+  action: Action;
+  status: "queued" | "running" | "done" | "failed" | "interrupted";
+  lines: string[];
+  model: string; // as started, for Resume
+  effort: string;
+  // epoch seconds (server clock); a job only known locally has none
+  submitted?: number;
+  started?: number | null;
+  ended?: number | null;
 }
 /** Per-run choice; "" falls back to cfg.yaml. */
 export type AgentChoice = { model: string; effort: string };

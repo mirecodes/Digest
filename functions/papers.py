@@ -90,7 +90,7 @@ def is_evicted(folder: Path) -> bool:
 
 
 def digest_verify(folder: Path) -> str | None:
-    report = output_path(folder, "report")
+    report = output_path(folder)
     if not report.is_file():
         return None
     m = VERIFY_RE.search(report.read_text(encoding="utf-8")[:2000])
@@ -116,6 +116,7 @@ class PaperEntry:
     figure_notes: dict = field(default_factory=dict)
     status: str = "ok"          # ok | evicted | new (in src/ only, not prepared yet)
     source: str | None = None   # src/ PDF of a "new" paper
+    sha: str | None = None      # PDF content hash (registry): stays the same when the folder moves or is prepared
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -137,7 +138,7 @@ def entry(folder: Path, root: Path) -> PaperEntry:
         folder=str(folder),
         folder_rel=rel.as_posix(),
         num_pages=_count(work / "pages.md", r"^<!-- PAGE \d+ -->"),
-        has_report=output_path(folder, "report").is_file(),
+        has_report=output_path(folder).is_file(),
         digest_verify=digest_verify(folder),
         has_layout=(work / "layout" / "blocks.json").is_file(),
         translation={"done": sum(_count(p, r"^<!-- BLOCK ") for p in tr_files(work)),

@@ -96,7 +96,7 @@ input:focus { outline: 2px solid var(--accent); outline-offset: 0; background: v
 .chip.warn { background: rgba(255, 149, 0, 0.14); color: #b36800; }
 
 /* ---- library: centered lane, hairline list rows */
-.library { max-width: 720px; margin: 0 auto; padding: 48px 20px; }
+.library { max-width: 960px; margin: 0 auto; padding: 48px 20px; }
 .library-head h1 { font-size: 32px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 8px; }
 .library-head p { color: var(--text-muted); font-size: 15px; margin: 0 0 24px; }
 .library-head .paper-search { width: 100%; padding: 14px 20px; font-size: 15px; }
@@ -107,16 +107,86 @@ input:focus { outline: 2px solid var(--accent); outline-offset: 0; background: v
   font: inherit; font-size: 14px; color: var(--text); padding: 7px 10px;
   border: none; border-radius: var(--radius-card); background: var(--surface);
 }
-.library h2 { font-size: 14px; font-weight: 600; color: var(--text-muted); margin: 32px 0 8px; }
-.paper-list {
-  list-style: none; margin: 16px 0 0; padding: 0 20px; background: var(--bg);
-  border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-card);
+/* ---- library tree (VS Code explorer): flat full-width rows, 16px per level, a 1px guide under each parent's
+   chevron; the selected row carries the tinted-blue wash, the circle select sits at the right edge */
+.tree {
+  --indent: 16px; --gutter: 12px;
+  margin-top: 24px; padding-bottom: 6px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-card); overflow: hidden;
 }
-.paper-list li { min-height: 64px; padding: 14px 0; }
-.paper-list li + li { border-top: 1px solid var(--border); }
-.paper-list .row { display: flex; align-items: center; gap: 8px; }
-.paper-list .row .info { margin-right: 8px; }
-.job { margin-top: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.batch-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px var(--gutter) 10px 20px;
+  margin-bottom: 6px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text-muted);
+}
+.batch-bar .spacer { flex: 1; }
+.batch-bar select {
+  font: inherit; font-size: 13px; color: var(--text); padding: 6px 10px;
+  border: none; border-radius: var(--radius-btn); background: var(--surface);
+}
+.batch-bar .select-all-label { margin-left: 4px; }
+.tree-row {
+  display: flex; align-items: center; gap: 6px; min-height: 40px;
+  padding: 4px var(--gutter) 4px calc(var(--gutter) + var(--depth) * var(--indent));
+}
+.tree-row, .tree-item > .job {
+  background-image: repeating-linear-gradient(to right, transparent 0 7px, var(--border) 7px 8px, transparent 8px var(--indent));
+  background-size: calc(var(--depth) * var(--indent)) 100%;
+  background-position: var(--gutter) 0;
+  background-repeat: no-repeat;
+}
+.tree-row { transition: background-color 96ms ease-out; }
+.tree-row:hover { background-color: var(--bg-alt); }
+.tree-row.selected { background-color: var(--accent-soft); }
+.tree-row.selected:hover { background-color: #dcecff; }
+.tree-row > svg, .twisty svg { width: 16px; height: 16px; flex: none; color: var(--text-dim); }
+.twisty-space { width: 16px; flex: none; }
+.twisty {
+  flex: 1; min-width: 0; justify-content: flex-start; gap: 6px; padding: 6px 0;
+  background: transparent; color: var(--text-secondary); font-weight: 600;
+}
+.twisty:hover { background: transparent; }
+.twisty:active { transform: none; }
+.twisty svg:first-child { transition: transform 96ms ease-out; }
+.twisty[aria-expanded="false"] svg:first-child { transform: rotate(-90deg); }
+.twisty .folder-name { overflow: hidden; text-overflow: ellipsis; }
+.twisty .count { font-weight: 400; color: var(--text-dim); }
+.paper-row .name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 14px; font-weight: 600; color: var(--text);
+}
+.paper-row .pages { min-width: 36px; text-align: right; font-size: 12px; color: var(--text-dim); }
+.paper-row .chip { font-size: 11px; padding: 3px 6px; white-space: nowrap; }
+/* status marks: grey line icons, blue once that part is done; fixed width so they line up in columns */
+.marks { display: inline-flex; gap: 2px; margin: 0 6px 0 2px; }
+.mark { display: inline-flex; padding: 3px; color: #b0b8c1; }
+.mark svg { width: 18px; height: 18px; }
+.mark.on { color: var(--accent); }
+.paper-row button:not(.select-circle) { padding: 7px 10px; font-size: 13px; }
+.select-circle {
+  padding: 4px; margin-left: 2px; border-radius: 50%; background: transparent; color: var(--border-strong);
+}
+.select-circle svg { width: 20px; height: 20px; }
+.select-circle:hover { background: transparent; color: var(--accent); }
+.select-circle[aria-checked="true"], .select-circle[aria-checked="mixed"] { color: var(--accent); }
+.select-circle:focus-visible { outline-offset: -2px; }
+/* narrow: the name keeps the first line, the marks and buttons wrap to a right-aligned second line */
+@media (max-width: 760px) {
+  .paper-row .chip, .paper-row .pages { display: none; }
+  .paper-row { flex-wrap: wrap; }
+  .paper-row .name { flex-basis: calc(100% - 44px); }
+  .paper-row .marks { margin-left: auto; }
+}
+/* run progress under the search: one line of text over a thin accent bar */
+.run-progress { margin-top: 12px; }
+.run-progress-text { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+.run-progress-text .bad { color: #c42b38; }
+.run-progress .bar { height: 6px; border-radius: 3px; background: var(--surface); overflow: hidden; }
+.run-progress .bar span { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 240ms ease-out; }
+@media (prefers-reduced-motion: reduce) { .run-progress .bar span { transition: none; } }
+.tree-item > .job { padding: 2px var(--gutter) 10px calc(var(--gutter) + 22px + var(--depth) * var(--indent)); }
+.job { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.job-head { display: flex; align-items: center; gap: 8px; }
+.job-head button { padding: 5px 10px; font-size: 13px; }
 .job pre {
   width: 100%; max-height: 220px; overflow: auto; margin: 0; padding: 12px 16px; border-radius: var(--radius-card);
   background: var(--surface); color: var(--text-secondary); font: 12px/1.6 "JetBrains Mono", "SF Mono", ui-monospace, monospace;
@@ -136,9 +206,6 @@ input:focus { outline: 2px solid var(--accent); outline-offset: 0; background: v
 .menu button:hover:not(:disabled) { background: var(--surface); }
 .menu button:first-child { font-weight: 600; color: var(--accent-hover); }
 .menu .done { color: var(--success); }
-.paper-list .info { flex: 1; min-width: 0; }
-.paper-list .name { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 6px; overflow-wrap: anywhere; }
-.paper-list .meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--text-muted); font-size: 13px; }
 .library .empty-state { color: var(--text-muted); font-size: 15px; padding: 48px 0; text-align: center; }
 
 /* ---- reader layout */

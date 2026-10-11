@@ -2,7 +2,7 @@
 
 Turn research-paper PDFs into:
 
-- a **source-verified report and one-page summary** (Korean, then English), where every fact cites `[E#, p.N]` and a
+- a **source-verified report**, saved as `<name> [summary].md` (Korean, then English), where every fact cites `[E#, p.N]` and a
   script checks each citation against the extracted text;
 - a **side-by-side reader** (local web app): the PDF on the left, a full translation on the right with page-synced
   scrolling, highlights of key sentences, and figure notes.
@@ -20,12 +20,30 @@ CLI**. You bring your own account or API key. The project never stores or sends 
 
 ```bash
 git clone <this repo> paper-digest && cd paper-digest
+cp ~/Downloads/some-paper.pdf src/   # subfolders in src/ are kept in the output
+./run.sh                             # sets up on the first run, then opens http://127.0.0.1:8765
+```
+
+`./run.sh` is the only command needed day to day. It:
+
+1. runs `scripts/setup.sh` when `.venv` or the reader build is missing, and rebuilds the reader when its sources
+   changed (e.g. after `git pull`);
+2. checks that the AI agent CLI is installed (`scripts/internal/agent.sh --check`; it does not check the login).
+   Without it you can still read, but **Process** fails, so install and log in first (next section);
+3. starts the reader. In the library, tick papers, a folder or **Select all**, pick a step and click
+   **Run on selected**; or use **Process ▾** on one paper. Ctrl+C stops it.
+
+Options go to `scripts/viewer.sh`: `./run.sh --port 8800`, `./run.sh --no-open`.
+
+Step by step, or without the reader:
+
+```bash
 scripts/setup.sh                    # .venv, Python packages, reader build
 scripts/internal/selftest.sh        # must print [selftest] PASS
 # pick and log in to an AI (next section), then:
 scripts/internal/agent.sh --check   # shows the backend, its version and how to log in
 cp ~/Downloads/some-paper.pdf src/
-scripts/digest.sh                   # report + summary for every new PDF in src/
+scripts/digest.sh                   # report for every new PDF in src/
 scripts/viewer.sh                   # opens http://127.0.0.1:8765
 ```
 
@@ -79,7 +97,7 @@ To see the exact command without running anything, use `scripts/internal/agent.s
 
 ### How the three backends share one workflow
 
-The procedure lives in plain-markdown skills: `.claude/skills/paper-digest/SKILL.md` (report and summary) and
+The procedure lives in plain-markdown skills: `.claude/skills/paper-digest/SKILL.md` (the report) and
 `.claude/skills/paper-annotate/SKILL.md` (translation, highlights, figure notes). Project rules are in `CLAUDE.md`.
 Claude Code runs a skill as a slash command. Codex and Gemini are told to read the same skill file and follow it.
 Correctness never depends on the model: `verify.sh` and `verify_annotations.sh` check every quote, citation, page
@@ -92,10 +110,11 @@ with Claude, so another model may need more fix-up rounds, but it cannot slip in
 
 | Task | Command |
 |---|---|
-| Report and summary for new PDFs in `src/` (up to `max_papers`) | `scripts/digest.sh` |
+| Report for new PDFs in `src/` (up to `max_papers`) | `scripts/digest.sh` |
 | …for one paper | `scripts/digest.sh -n "my-paper.pdf"` |
 | Reader annotations (translation, highlights, figure notes); no summary needed | `scripts/annotate.sh -n "<paper folder name or src/ PDF>"` |
 | …only some parts | `scripts/annotate.sh -n "<name>" --only translation,highlights,figures` |
+| Continue a run that was cut off, keeping the finished work | add `--resume` to `digest.sh -n …` or `annotate.sh -n …` |
 | Start the reader | `scripts/viewer.sh` |
 | List all papers and their state | `scripts/internal/registry.sh` |
 
@@ -103,19 +122,36 @@ With Claude Code you can also type `/paper-digest` or `/paper-annotate -n NAME` 
 
 ### Reader
 
-`scripts/viewer.sh` lists every paper: processed ones and new PDFs from `src/` (marked **New**). Each row has
-**Process ▾**:
+`scripts/viewer.sh` lists every paper as a tree that follows `src/`: processed ones and new PDFs (marked **New**).
+Click a folder to collapse it; the browser remembers which folders are closed. Each paper has **Process ▾**:
 
-- **Run all**: summary (if missing), then every missing translation, highlight and figure-note step;
-- **Summary & report**, **Translation**, **Highlights**, **Figure notes**: one step each, in any order. None needs
-  another: every job first prepares the paper (copies the PDF, extracts the text, registers it), which is instant
-  when already done.
+- **Run all**: summary (if missing), then the missing translation and annotation;
+- **Summary**: evidence and the verified report;
+- **Translation**: every block of the paper in `target_lang`;
+- **Annotation**: highlights and figure notes.
 
-Finished steps show a check mark. The job log streams under the row. **Open** shows the PDF and its translation side
-by side:
+Each step runs on its own, in any order: every job first prepares the paper (copies the PDF, extracts the text,
+registers it), which is instant when already done. Finished steps show a check mark, and the job log streams under
+the row.
 
-- **Highlights**: key sentences are tinted on the PDF by category (problem, contribution, insight, method, result,
-  limitation). Hover one for its note. Toggle them with the **Highlights** button or `H`, and filter by category in
+The four icons on each row turn from grey to blue as the paper gets there: copied into the output folder,
+translated, highlighted, figures explained (hover for the counts). While jobs run, a bar under the search shows how
+many of the queued papers are done and about how long the rest will take (estimated from the jobs that finished).
+
+To process many papers at once, click the circles on the right: one per paper, one per folder (every paper inside
+it), and **Select all** at the top. Selected rows turn light blue. Then pick a step and click **Run on selected**. The
+papers queue in list order, `parallel` of them run at once, and papers whose step is already done are skipped.
+
+If a run is cut off, its log shows **Failed** (the agent stopped, e.g. the connection to the AI dropped) or **Stopped
+while running** (the viewer was closed or crashed; this shows up the next time it starts). Click **Resume**: it runs
+the same step with the same model and effort, keeping what was already finished (translated pages, verified
+evidence, figure notes) and doing only the rest.
+
+**Open** shows the PDF and its translation side by side:
+
+- **Highlights**: the paper's argument, tinted on the PDF by category (problem, contribution, insight, method,
+  result, limitation): the agent first writes a reading map (problem, gap, each contribution with how it works and
+  what shows it works, limits), then marks the one sentence that states each point. Hover one for its note. Toggle them with the **Highlights** button or `H`, and filter by category in
   the sidebar's Highlights tab.
 - **Figure notes**: hover a figure (or its ⓘ badge) for a floating explanation. Click to keep it open, `Esc` to
   close. The sidebar's Figures tab lists them all.
@@ -130,20 +166,20 @@ by side:
 | `agent.backend` / `agent.model` / `agent.effort` | AI coding agent, model and effort, see above (the reader can change model and effort per run) | `claude` / CLI default / CLI default |
 | `title_words` | words kept from a long title in the folder name | 5 |
 | `max_papers` | papers per run without `-n` (0 = no limit) | 5 |
+| `parallel` | reader jobs that run at once (1–10); each is a separate AI session, so more uses your rate limit faster | 3 |
 | `viewer.host` / `viewer.port` | reader address | `127.0.0.1` / `8765` |
 | `viewer.auto_annotate` | run `annotate.sh` automatically after `digest.sh` | `false` |
 
-The report and summary are always Korean, then English. `target_lang` only affects the reader annotations.
+The report is always Korean, then English. `target_lang` only affects the reader annotations.
 
 ## Files
 
 ```text
 src/                                   your PDFs (subfolders allowed); never modified
 <out_dir>/.paper-registry.yaml         every paper by PDF content hash: src/ path, folder, state (rebuilt from disk)
-<out_dir>/<subfolders>/<Short Title (Year)>/
+<out_dir>/<subfolders>/<Short Title (Year)>/   <subfolders> mirror src/; move a PDF in src/ and its folder follows
   <Short Title (Year)>.pdf             copy of the PDF
-  <Short Title (Year)> - report.md
-  <Short Title (Year)> - summary.md
+  <Short Title (Year)> [summary].md   the report
   .work/                               hidden working files: pages.md (citation basis), evidence.md, layout/,
                                        translate/pNNN.<lang>.md, highlights.md, figure_notes.md, viewer.json
 ```

@@ -56,7 +56,8 @@ def parse_evidence(md: str) -> dict[str, dict]:
 
 def parse_highlights(md: str, lang: str) -> list[dict]:
     return [{"id": hid, "category": (_field(body, "category") or "").lower(), "page": _int(_field(body, "page")),
-             "quote": _quote(body), "note_tr": _field(body, f"note_{lang}"), "note_en": _field(body, "note_en")}
+             "quote": _quote(body), "note_tr": _field(body, f"note_{lang}"), "note_en": _field(body, "note_en"),
+             "claim": (_field(body, "claim") or "").upper() or None}
             for hid, body in _blocks(md, "H")]
 
 

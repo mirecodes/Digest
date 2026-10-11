@@ -16,12 +16,14 @@
 
 The file is a cache of what is on disk: sync() rebuilds it from the output folders and src/, so deleting it is safe
 (it costs one hash per PDF). Deleting an output folder makes its paper new again; moving it keeps the identity.
-CLI: python -m functions.registry   (sync and print the table)
+The output tree mirrors src/: after a PDF moves to another src/ folder, relocate() moves its output folder too
+(prepare.py for that paper, the viewer while no job runs, and the CLI below).
+CLI: python -m functions.registry   (sync, move folders to mirror src/, print the table)
 """
 import hashlib
 import os
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import yaml
 
@@ -98,6 +100,39 @@ def sync(root: Path | None = None, src: Path = SRC_DIR) -> tuple[dict[str, dict]
     return papers, entries
 
 
+def relocate(root: Path, papers: dict[str, dict], only: set[str] | None = None) -> bool:
+    """Move output folders (of the shas in `only`, default all) back below their PDF's folder in src/, so the output
+    tree mirrors src/ after it was reorganized. A folder already below one of its PDF's folders stays; a taken
+    destination is left alone. Updates `papers` and the registry file; returns whether a folder moved."""
+    moved = False
+    for sha, p in papers.items():
+        if not p.get("folder") or not p.get("sources") or (only is not None and sha not in only):
+            continue
+        cur = PurePosixPath(p["folder"])
+        dirs = sorted({PurePosixPath(rel).parent for rel in p["sources"]})
+        if cur.parent in dirs or not (root / cur).is_dir():
+            continue
+        new = dirs[0] / cur.name
+        if (root / new).exists():
+            print(f"[registry] not moved, the destination exists: {cur} -> {new}")
+            continue
+        (root / new).parent.mkdir(parents=True, exist_ok=True)
+        os.rename(root / cur, root / new)
+        p["folder"] = new.as_posix()
+        moved = True
+        print(f"[registry] moved to mirror src/: {cur} -> {new}")
+        for parent in (root / cur).parents:     # drop the folders the move left empty
+            if parent == root:
+                break
+            try:
+                parent.rmdir()
+            except OSError:
+                break
+    if moved:
+        _save(root, papers)
+    return moved
+
+
 def done_sources(papers: dict[str, dict]) -> set[str]:
     """src/ paths whose PDF already has an output folder."""
     return {rel for e in papers.values() if e.get("folder") for rel in e["sources"]}
@@ -111,10 +146,16 @@ def folder_for(pdf: Path, root: Path | None = None, src: Path = SRC_DIR) -> Path
     return root / folder if folder else None
 
 
-def library(root: Path | None = None, src: Path = SRC_DIR) -> list[PaperEntry]:
-    """Output folders plus src/ PDFs that are not prepared yet (status "new", id from the PDF hash)."""
+def library(root: Path | None = None, src: Path = SRC_DIR, move: bool = False) -> list[PaperEntry]:
+    """Output folders plus src/ PDFs that are not prepared yet (status "new", id from the PDF hash).
+    move: first relocate() output folders to mirror src/."""
     root = (root or out_root(load_config())).resolve()
     papers, entries = sync(root, src)
+    if move and relocate(root, papers):
+        papers, entries = sync(root, src)
+    sha_of = {p["folder"]: sha for sha, p in papers.items() if p.get("folder")}
+    for e in entries:
+        e.sha = sha_of.get(e.folder_rel)
     new = []
     for sha, p in papers.items():
         if p.get("folder"):
@@ -122,12 +163,14 @@ def library(root: Path | None = None, src: Path = SRC_DIR) -> list[PaperEntry]:
         rel = sorted(p["sources"])[0]
         new.append(PaperEntry(id=sha[:12], name=p["name"], folder="", folder_rel=rel, num_pages=0, has_report=False,
                               digest_verify=None, has_layout=False, translation={"done": 0, "total": 0},
-                              figure_notes={"done": 0, "total": 0}, status="new", source=str(src / rel)))
+                              figure_notes={"done": 0, "total": 0}, status="new", source=str(src / rel), sha=sha))
     return sorted(entries + new, key=lambda e: e.folder_rel)
 
 
 def main() -> int:
-    papers, _ = sync()
+    root = out_root(load_config()).resolve()
+    papers, _ = sync(root)
+    relocate(root, papers)
     for sha, p in papers.items():
         where = p["folder"] or f"src/{sorted(p['sources'])[0]}"
         print(f"{sha}  {p['state']:<9}  {where}")

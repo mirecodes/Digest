@@ -1,7 +1,7 @@
 ---
 name: paper-digest
-description: Read a research paper PDF and produce a source-verified detailed report and one-page summary, written in Korean followed by English. Use when the user asks to summarize or digest a paper, or invokes /paper-digest.
-argument-hint: [-n NAME]
+description: Read a research paper PDF and produce a source-verified detailed report, written in Korean followed by English. Use when the user asks to summarize or digest a paper, or invokes /paper-digest.
+argument-hint: [-n NAME] [--resume]
 ---
 
 # Paper Digest
@@ -9,6 +9,10 @@ argument-hint: [-n NAME]
 Input: `$ARGUMENTS`
 - `-n NAME`: one paper (a src/ relative path, file name or stem, or a PDF path). A bare name or path without `-n` means the same.
 - empty: every PDF in `src/` that has no output folder yet, at most `max_papers` (configs/cfg.yaml) per run.
+- `--resume`: an earlier run of this paper was cut off (connection lost, viewer closed). Keep what it finished:
+  still read pages.md (step 2), then, if `.work/evidence.md` exists and `verify.sh "<paper>" --evidence-only`
+  shows no ERRORs, keep it (add only blocks for checklist categories it lacks) and continue at step 5; if the
+  report also exists, complete and fix it instead of rewriting it. Otherwise run every step as usual.
 
 Core principle: **evidence first, writing second.** Collect evidence from the source text,
 verify it with a script, then write the report from verified evidence only. Never change this order.
@@ -29,7 +33,7 @@ Never call the system `python` directly. If a script reports that `.venv` is mis
      `-n "NAME" --force`. In a non-interactive run (`claude -p`), do not use `--force`; just report it.
    - `skip (PDF looks scanned ...)` / exit 2: tell the user OCR is needed.
    - Exit 1: nothing to process; tell the user and stop.
-2. Run steps 2-8 for each `ready` folder, one paper at a time, finishing one before starting the next.
+2. Run steps 2-7 for each `ready` folder, one paper at a time, finishing one before starting the next.
    Below, `<paper>` means that folder and `<name>` its folder name.
 3. Work files live in the hidden `<paper>/.work/` (Obsidian does not index it).
    From now on, all page numbers refer to the `<!-- PAGE N -->` markers in `.work/pages.md`,
@@ -52,7 +56,7 @@ Run `scripts/internal/verify.sh "<paper>" --evidence-only` and fix until there a
 "quote not found" means the quote was invented or paraphrased: find the exact text in pages.md,
 or delete the block if it does not exist.
 
-### 5. Write the report → `<name> - report.md`
+### 5. Write the report → `<name> [summary].md`
 The exact file name matters: verify.sh looks for it, and it keeps notes unique in Obsidian search.
 Follow `.claude/skills/paper-digest/templates/report.md`.
 1. Write the **complete Korean version** first. Technical terms stay in English (e.g. attention, ablation).
@@ -61,17 +65,13 @@ Follow `.claude/skills/paper-digest/templates/report.md`.
 3. End with one shared Sources table listing only the evidence actually cited.
 - Explain in depth: a reader should grasp the paper without the original. Prefer paragraphs, and explain every symbol in equations.
 
-### 6. Write the summary → `<name> - summary.md`
-Follow `.claude/skills/paper-digest/templates/summary.md`. Condense the report to one page:
-same languages, same markers, no new facts. Every citation must already appear in the report.
-
-### 7. Final verification
-Run `scripts/internal/verify.sh "<paper>"` (checks both the report and the summary).
+### 6. Final verification
+Run `scripts/internal/verify.sh "<paper>"`.
 - Fix every ERROR. If ERRORs remain after 3 rounds, report them to the user as they are.
 - For each WARN "number without a source": add a citation, or tag it `[INTERP]` (opinion) or `[CALC: ...]` (computed).
 - For WARN "numbers differ between Korean and English": make the two versions match.
 
-### 8. Report back
+### 7. Report back
 Tell the user briefly, per paper: the paper folder, verify result (PASS/FAIL, warning count),
 NOT_REPORTED items, and any tables whose parsing was uncertain. List skipped papers and why.
 Reply in the user's language.

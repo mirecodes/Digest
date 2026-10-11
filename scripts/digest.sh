@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
 # Digest papers from src/ with a headless coding agent (agent.backend in configs/cfg.yaml: claude | codex | gemini),
 # one session per paper (scripts/internal/agent.sh).
-# Usage: scripts/digest.sh [-n NAME]
-#   -n NAME: one paper (src/ relative path, file name or stem, or a PDF path)
+# Usage: scripts/digest.sh [-n NAME] [--resume]
+#   -n NAME:  one paper (src/ relative path, file name or stem, or a PDF path)
+#   --resume: continue an interrupted or failed run, keeping evidence / report work that already passes verify
 #   without -n: every src/ PDF without an output folder yet, at most max_papers (configs/cfg.yaml) per run.
 # src/ is left as it is; the registry (<out_dir>/.paper-registry.yaml) records which PDFs are done.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/internal/_env.sh"
 cd "$ROOT"
 
-usage() { echo "usage: scripts/digest.sh [-n NAME]" >&2; exit 1; }
-NAME=""
-case "${1:-}" in
-  -n|--name) [ $# -eq 2 ] || usage; NAME="$2" ;;
-  "") ;;
-  *) usage ;;
-esac
+usage() { echo "usage: scripts/digest.sh [-n NAME] [--resume]" >&2; exit 1; }
+NAME=""; RESUME=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -n|--name) [ $# -ge 2 ] || usage; NAME="$2"; shift ;;
+    --resume) RESUME=" --resume" ;;
+    *) usage ;;
+  esac
+  shift
+done
 
 RC=0
 LIST="$("$PY" -m functions.prepare --list ${NAME:+-n "$NAME"})" || RC=$?
@@ -26,7 +30,7 @@ LIST="$("$PY" -m functions.prepare --list ${NAME:+-n "$NAME"})" || RC=$?
 FAILED=0
 while IFS= read -r PAPER; do
   echo "[digest] === $PAPER"
-  "$ROOT/scripts/internal/agent.sh" paper-digest "-n \"$PAPER\"" \
+  "$ROOT/scripts/internal/agent.sh" paper-digest "-n \"$PAPER\"$RESUME" \
     || { echo "[digest] FAILED: $PAPER" >&2; FAILED=$((FAILED + 1)); }
 done <<< "$LIST"
 

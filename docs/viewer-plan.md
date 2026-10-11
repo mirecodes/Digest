@@ -701,7 +701,7 @@ function mapRef(y: number, from: PaneLayout, to: PaneLayout): number {
 | DELETE | `/papers/{id}/chats/{tid}` | 스레드 삭제 (사용자 요청 시만) |
 | GET / PUT | `/papers/{id}/annotations` | 사용자 상태 (PUT 전체 교체, 버전 필드로 낙관적 잠금 → 충돌 409) |
 | POST | `/papers/{id}/annotate` | 전처리 job 등록 → `{job_id}` |
-| GET | `/jobs/{job_id}/events` | SSE: `log`, `status`, `done` |
+| GET | `/jobs` | 이번·지난 서버 실행의 job `{id, paper(sha), action, status, lines, model, effort}` — 라이브러리가 1초마다 폴링 (D4-12, D4-13) |
 | POST | `/papers/{id}/export/notes` | `<name> - notes.md` 생성 → `{path}` |
 | POST | `/papers/{id}/export/pdf` | `<name> - annotated.pdf` 생성 → `{path}` |
 | GET | `/config` | 프론트에 필요한 설정 (target_lang, 백엔드 종류, 카테고리 기본값) |
@@ -715,7 +715,7 @@ event: done       data: {"cached": false, "thread_id": "...", "usage": {...}}
 event: error      data: {"message": "..."}
 ```
 
-jobs: 동시에 1개만 실행, 나머지는 큐. 서버 종료 시 실행 중 서브프로세스 terminate.
+jobs: 동시에 `parallel`(cfg.yaml, 1..10)개 실행, 나머지는 큐, 논문당 1개. 서버 종료 시 실행 중 서브프로세스 terminate.
 
 ---
 

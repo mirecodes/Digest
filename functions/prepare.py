@@ -5,9 +5,10 @@ without it, every src/ PDF that has no output folder yet, at most `max_papers` (
 src/ is never modified. Papers are identified by content (functions/registry.py, <out_root>/.paper-registry.yaml),
 so a renamed or duplicated PDF is not processed twice.
 
-Layout: <out_root>/<path of the PDF relative to src/>/<Paper Name>/
+Layout (mirrors src/; a folder follows its PDF to another src/ folder, functions/registry.py relocate()):
+<out_root>/<path of the PDF relative to src/>/<Paper Name>/
   <Paper Name>.pdf                                     (a copy; the original stays where it is)
-  <Paper Name> - report.md, <Paper Name> - summary.md   (written later)
+  <Paper Name> [summary].md                            (written later)
   .work/pages.md, .work/captions.md, .work/evidence.md (hidden from Obsidian; evidence written later)
 
 <out_root> is `out_dir` from configs/cfg.yaml, or <project>/out when it is empty.
@@ -87,11 +88,13 @@ def select(name: str | None, limit: int, src: Path, done: set[str] = frozenset()
 
 def prepare_one(pdf: Path, cfg: dict, args, papers: dict) -> int:
     """`papers` is the registry (sha -> entry); it gets the new folder so a duplicate later in the run is caught."""
-    from functions.registry import pdf_sha     # registry imports this module
+    from functions.registry import pdf_sha, relocate     # registry imports this module
     from functions.papers import digest_verify
 
     root = out_root(cfg)
     sha = pdf_sha(pdf)
+    if not args.dry_run:
+        relocate(root, papers, {sha})       # the PDF moved to another src/ folder: its output folder follows
     known = papers.get(sha, {}).get("folder")
     if known and (root / known).is_dir():
         dest = root / known

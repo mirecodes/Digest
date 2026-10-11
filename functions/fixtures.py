@@ -377,7 +377,7 @@ Summary: Attention patterns on a long input, shown as colors.
 def write_digest(paper: Path) -> None:
     """evidence.md and a report header, as /paper-digest would leave them."""
     (paper / ".work" / "evidence.md").write_text(EVIDENCE, encoding="utf-8")
-    (paper / f"{paper.name} - report.md").write_text(REPORT_HEADER, encoding="utf-8")
+    (paper / f"{paper.name} [summary].md").write_text(REPORT_HEADER, encoding="utf-8")
 
 
 def write_annotations(paper: Path, variant: str = "good") -> None:
@@ -422,17 +422,28 @@ def prepare_demo(folder: Path, annotated: bool = True) -> Path:
 
 def prepare_e2e(root: Path, src: Path | None = None) -> None:
     """Papers for the viewer end-to-end tests: annotated FooNet and a long paper under root; with src, also a src/
-    folder holding a new paper (inbox/fresh.pdf) and a copy of the FooNet PDF (dup.pdf, must not show up as new)."""
+    folder holding a new paper (inbox/fresh.pdf) and a copy of the FooNet PDF (dup.pdf, must not show up as new).
+    The long paper's translation job was cut off by a viewer stop (.paper-jobs/jobs.json), so it starts interrupted."""
+    import json
     import shutil
 
     from functions.extract_pdf import extract
     from functions.layout import build_layout
+    from functions.registry import pdf_sha
 
     demo = prepare_demo(root / "Demo (2024)")
     folder = root / "long" / "Long Paper (2024)"
     build_long(folder / f"{folder.name}.pdf")
     extract(folder / f"{folder.name}.pdf", folder / ".work")
     build_layout(folder, force=True)
+    log = folder / ".work" / "viewer" / "jobs" / "cut-translation.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text("[job] step 2/2: annotate.sh -n long --only translation\n[annotate] p001 translated\n", encoding="utf-8")
+    sha = pdf_sha(folder / f"{folder.name}.pdf")
+    (root / ".paper-jobs").mkdir(exist_ok=True)
+    (root / ".paper-jobs" / "jobs.json").write_text(json.dumps({sha: {
+        "id": "cut000000000", "key": sha, "action": "translation", "status": "running",
+        "env": {"PAPER_AGENT_EFFORT": "low"}, "log": str(log)}}), encoding="utf-8")
     if src:
         (src / "inbox").mkdir(parents=True, exist_ok=True)
         build_long(src / "inbox" / "fresh.pdf", pages=4)

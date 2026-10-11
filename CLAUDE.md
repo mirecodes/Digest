@@ -1,11 +1,12 @@
 # Paper Digest
 
-Turns paper PDFs into a source-verified report and summary (Korean, then English).
+Turns paper PDFs into a source-verified report, `<name> [summary].md` (Korean, then English).
 For any paper request, follow the `/paper-digest` skill exactly.
 
 ## Layout
 ```
-configs/cfg.yaml   out_dir (empty = out/), target_lang (viewer translations), agent (claude | codex | gemini), title_words, max_papers
+configs/cfg.yaml   out_dir (empty = out/), target_lang (viewer translations), agent (claude | codex | gemini), title_words, max_papers, parallel (viewer jobs at once)
+run.sh             one-command start: setup if needed, rebuild the reader if stale, agent check, viewer
 functions/         prepare, registry, paper_name, extract_pdf, verify, selftest
 scripts/           user entry points: setup.sh, digest.sh [-n NAME], annotate.sh [-n NAME] [--only PARTS], viewer.sh
 scripts/internal/  agent (runs a skill with the configured AI CLI), prepare, verify, registry, selftest (.sh; _env.sh is sourced)
@@ -14,7 +15,7 @@ src/               input folder, never modified; a PDF is copied out when prepar
 web/               viewer frontend (React + Vite + pdf.js); docs/ viewer plan and decision log
 <out_dir>/.paper-registry.yaml   every paper by PDF hash: src/ paths, output folder, state (rebuilt from disk)
 <out_dir>/<subfolders>/<Short Title (Year)>/
-  <name>.pdf, "<name> - report.md", "<name> - summary.md"
+  <name>.pdf, "<name> [summary].md" (the report)
   .work/           pages.md (citation basis), captions.md, evidence.md; hidden from Obsidian
 ```
 

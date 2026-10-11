@@ -6,17 +6,15 @@ output root; paths that resolve outside their paper folder are refused. API: doc
 Environment: PAPER_VIEWER_OUT and PAPER_VIEWER_SRC override the output root and src/ (tests use temporary ones).
 """
 import hashlib
-import json
 import os
 import re
-import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
 import pymupdf
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -25,7 +23,7 @@ from functions.papers import MODEL_RE, PaperEntry, agent_cfg, find_pdf, is_evict
 from functions.prepare import SRC_DIR
 from functions.registry import library
 from functions.verify import WORK_DIR
-from functions.viewer.jobs import JOBS, Step
+from functions.viewer.jobs import JOBS, Step, parallel
 
 DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
 PDFJS = Path(__file__).resolve().parents[2] / "web" / "node_modules" / "pdfjs-dist"
@@ -38,6 +36,7 @@ NO_BUILD_HTML = """<!doctype html><meta charset="utf-8"><title>Paper Viewer</tit
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI):
+    JOBS.restore(viewer_root() / ".paper-jobs" / "jobs.json")     # jobs cut off by the last stop come back
     yield
     JOBS.shutdown()
 
@@ -56,8 +55,9 @@ def viewer_src() -> Path:
 
 
 def _rescan() -> list[PaperEntry]:
-    """Output folders and new src/ PDFs, via the registry (which this also brings up to date)."""
-    entries = library(viewer_root(), viewer_src())
+    """Output folders and new src/ PDFs, via the registry (which this also brings up to date). While no job runs,
+    output folders are first moved to mirror src/ (a move under a running job would break it)."""
+    entries = library(viewer_root(), viewer_src(), move=not JOBS.busy())
     _papers.clear()
     _papers.update({e.id: e for e in entries})
     return entries
@@ -106,7 +106,7 @@ def health():
 def config():
     cfg = viewer_cfg()
     agent = agent_cfg()
-    return {**{k: cfg[k] for k in ("target_lang", "llm_backend")},
+    return {**{k: cfg[k] for k in ("target_lang", "llm_backend")}, "parallel": parallel(),
             "agent": {k: agent[k] for k in ("backend", "model", "effort", "models", "efforts")}}
 
 
@@ -153,13 +153,15 @@ def crop(pid: str, page: int, bbox: str, dpi: int = 200):
     return FileResponse(out, media_type="image/png")
 
 
-ANNOTATE_PARTS = ("translation", "highlights", "figures")
+# library action -> annotate.sh --only parts
+ANNOTATE_PARTS = {"translation": "translation", "annotation": "highlights,figures"}
 
 
 class RunRequest(BaseModel):
-    action: Literal["all", "digest", "translation", "highlights", "figures"]
+    action: Literal["all", "digest", "translation", "annotation"]
     model: str = ""             # "" = agent.model in cfg.yaml
     effort: str = ""            # "" = agent.effort in cfg.yaml
+    resume: bool = False        # continue an interrupted or failed run: keep the work already done
 
 
 def _agent_env(req: RunRequest) -> dict[str, str]:
@@ -177,19 +179,21 @@ def _agent_env(req: RunRequest) -> dict[str, str]:
     return env
 
 
-def _steps(e: PaperEntry, action: str) -> list[Step]:
+def _steps(e: PaperEntry, action: str, resume: bool = False) -> list[Step]:
     """Every job starts by preparing the paper (copy the PDF, extract the text, register it; instant when done), so
-    each action runs on its own. all: summary (unless it passed), then every missing annotation part."""
+    each action runs on its own. all: summary (unless it passed), then every missing annotation part.
+    resume: the agent steps get --resume (keep what an interrupted run already finished)."""
     pdf = e.source or str(find_pdf(Path(e.folder)))
     steps: list[Step] = [("internal/prepare.sh", ["--ensure", "-n", pdf])]
     # a new paper has no folder yet: annotate.sh finds the one prepare made from the PDF (via the registry)
     target = e.folder or pdf
+    more = ["--resume"] if resume else []
     if action in ANNOTATE_PARTS:
-        return steps + [("annotate.sh", ["-n", target, "--only", action])]
+        return steps + [("annotate.sh", ["-n", target, "--only", ANNOTATE_PARTS[action], *more])]
     if action == "digest" or e.digest_verify != "PASS":
-        steps.append(("digest.sh", ["-n", pdf]))
+        steps.append(("digest.sh", ["-n", pdf, *more]))
     if action == "all":
-        steps.append(("annotate.sh", ["-n", target]))
+        steps.append(("annotate.sh", ["-n", target, *more]))
     return steps
 
 
@@ -201,38 +205,24 @@ def run(pid: str, req: RunRequest):
     if req.action == "digest" and e.digest_verify == "PASS":
         raise HTTPException(409, "the summary is already done (verify PASS)")
     log_dir = Path(e.folder) / WORK_DIR / "viewer" / "jobs" if e.folder else viewer_root() / ".paper-jobs"
-    job = JOBS.submit(pid, req.action, _steps(e, req.action), log_dir, _agent_env(req))
+    # keyed by the PDF hash, so the job still finds its paper after the folder is made or moved, or a restart
+    job = JOBS.submit(e.sha or pid, req.action, _steps(e, req.action, req.resume), log_dir, _agent_env(req))
     return {"job_id": job.id, "status": job.status, "action": job.action}
 
 
-def _sse(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+JOB_LOG_LINES = 200
 
 
-@app.get("/api/jobs/{job_id}/events")
-def job_events(job_id: str):
-    """SSE: `log` per output line, `status` on changes, `done` at the end."""
-    job = JOBS.get(job_id)
-    if job is None:
-        raise HTTPException(404, "unknown job")
-
-    def stream():
-        sent, status = 0, None
-        while True:
-            finished = job.finished       # read before the lines so no line is missed at the end
-            lines = job.lines[sent:]
-            for line in lines:
-                yield _sse("log", {"text": line})
-            sent += len(lines)
-            if job.status != status:
-                status = job.status
-                yield _sse("status", {"status": status})
-            if finished:
-                yield _sse("done", {"status": job.status, "returncode": job.returncode})
-                return
-            time.sleep(0.25)
-
-    return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+@app.get("/api/jobs")
+def jobs():
+    """Every job of this and the last server run (the latest per paper), oldest first, with its last output lines.
+    `paper` is the paper's sha (or id); model / effort let the library resume a job as it was started. The library
+    polls this: one request for any number of jobs (an SSE stream per job would hit the browser's six connections
+    per host)."""
+    return [{"id": j.id, "paper": j.key, "action": j.action, "status": j.status, "lines": j.lines[-JOB_LOG_LINES:],
+             "model": j.env.get("PAPER_AGENT_MODEL", ""), "effort": j.env.get("PAPER_AGENT_EFFORT", ""),
+             "submitted": j.submitted, "started": j.started, "ended": j.ended}
+            for j in JOBS.all()]
 
 
 # ---- frontend (single-page app: / and /r/<id> both serve index.html)

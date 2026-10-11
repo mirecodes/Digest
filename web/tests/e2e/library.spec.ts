@@ -1,15 +1,31 @@
 // Library processing: the server runs a stub instead of scripts/digest.sh / annotate.sh (PAPER_VIEWER_JOB_CMD in
-// playwright.config.ts), so no Claude call happens. src/ holds a new paper and a copy of the demo PDF.
+// playwright.config.ts), so no Claude call happens. src/ holds a new paper and a copy of the demo PDF; the long
+// paper's translation job was cut off by a viewer stop (functions/fixtures.py).
 import { expect, test } from "@playwright/test";
+
+// runs first: any later job on the long paper replaces the interrupted one
+test("a job cut off by a viewer stop shows as stopped and resumes with the same effort", async ({ page }) => {
+  await page.goto("/");
+  const row = page.locator("[data-paper-id]", { hasText: "Long Paper (2024)" });
+  const log = row.getByTestId("job-log");
+  await expect(log.locator("[data-status]")).toHaveAttribute("data-status", "interrupted");
+  await expect(log.locator("[data-status]")).toContainText("Translation · Stopped while running");
+  await expect(log.locator("pre")).toContainText("p001 translated");
+  await row.getByRole("button", { name: "Resume" }).click();
+  await expect(log.locator("pre")).toContainText("PAPER_AGENT_EFFORT=low");
+  await expect(log.locator("pre")).toContainText("--only translation --resume");
+  await expect(log.locator("[data-status]")).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(row.getByRole("button", { name: "Resume" })).toHaveCount(0);
+});
 
 test("process menu runs one step and streams its log", async ({ page }) => {
   await page.goto("/");
   const row = page.locator("[data-paper-id]", { hasText: "Long Paper (2024)" });
   await row.getByRole("button", { name: "Process" }).click();
-  await row.getByRole("menuitem", { name: "Figure notes" }).click();
+  await row.getByRole("menuitem", { name: "Annotation" }).click();
   const log = row.getByTestId("job-log");
   await expect(log.locator("pre")).toContainText("stub annotate.sh -n");
-  await expect(log.locator("pre")).toContainText("--only figures");
+  await expect(log.locator("pre")).toContainText("--only highlights,figures");
   await expect(log.locator("[data-status]")).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(row.getByRole("button", { name: "Process" })).toBeEnabled();
 });
@@ -21,13 +37,12 @@ test("a new src/ paper is listed once and any step runs on its own, preparing th
   await expect(row).toContainText("New");
   await expect(row.getByRole("button", { name: "Open" })).toBeDisabled();
   await row.getByRole("button", { name: "Process" }).click();
-  for (const name of ["Run all", "Summary & report", "Translation", "Highlights", "Figure notes"]) {
-    await expect(row.getByRole("menuitem", { name })).toBeEnabled();
-  }
-  await row.getByRole("menuitem", { name: "Highlights" }).click();
+  await expect(row.getByRole("menuitem")).toHaveText(["Run all", "Summary", "Translation", "Annotation"]);
+  for (const item of await row.getByRole("menuitem").all()) await expect(item).toBeEnabled();
+  await row.getByRole("menuitem", { name: "Annotation" }).click();
   const log = row.getByTestId("job-log");
   await expect(log.locator("pre")).toContainText("stub internal/prepare.sh --ensure -n");
-  await expect(log.locator("pre")).toContainText("--only highlights");
+  await expect(log.locator("pre")).toContainText("--only highlights,figures");
   await expect(log.locator("pre")).not.toContainText("digest.sh");
   await expect(log.locator("[data-status]")).toHaveAttribute("data-status", "done", { timeout: 15_000 });
 });
@@ -49,11 +64,55 @@ test("the chosen model and effort reach the job", async ({ page }) => {
   await expect(page.getByLabel("Model")).toHaveValue("claude-sonnet-5-5"); // remembered in this browser
 });
 
-test("annotated paper shows the bundled translation and status chips", async ({ page }) => {
+test("a src/ folder collapses, and its circle selects every paper in it with a tinted row", async ({ page }) => {
+  await page.goto("/");
+  const folder = page.locator('[data-folder="inbox"]');
+  const row = folder.locator("[data-paper-id]", { hasText: "fresh" });
+  const toggle = folder.getByRole("button", { name: /inbox/ });
+  await expect(row).toBeVisible();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(row).toHaveCount(0);
+  await page.reload();
+  await expect(folder.getByRole("button", { name: /inbox/ })).toHaveAttribute("aria-expanded", "false"); // remembered
+  await toggle.click();
+  await expect(row).toBeVisible();
+
+  await folder.getByRole("checkbox", { name: "Select inbox" }).check();
+  await expect(row.getByRole("checkbox", { name: "Select fresh" })).toBeChecked();
+  await expect(row.locator(".tree-row")).toHaveClass(/selected/);
+  await expect(page.locator(".batch-bar")).toContainText("1 selected");
+  await page.getByLabel("Step for the selected papers").selectOption("translation");
+  await page.getByRole("button", { name: "Run on selected" }).click();
+  await expect(page.getByRole("status")).toContainText("1 queued");
+  const log = row.getByTestId("job-log");
+  await expect(log.locator("pre")).toContainText("--only translation");
+  await expect(log.locator("[data-status]")).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+});
+
+test("select all queues the papers with work left and skips the finished ones", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("checkbox", { name: "Select all" }).check();
+  await expect(page.locator(".batch-bar")).toContainText("3 selected");
+  await expect(page.locator(".tree-row.paper-row.selected")).toHaveCount(3);
+  await page.getByLabel("Step for the selected papers").selectOption("annotation");
+  await page.getByRole("button", { name: "Run on selected" }).click();
+  // the demo paper already has its highlights and every figure note
+  await expect(page.getByRole("status")).toContainText("2 queued · 1 skipped");
+  for (const name of ["Long Paper (2024)", "fresh"]) {
+    const log = page.locator("[data-paper-id]", { hasText: name }).getByTestId("job-log");
+    await expect(log.locator("pre")).toContainText("--only highlights,figures");
+    await expect(log.locator("[data-status]")).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  }
+});
+
+test("annotated paper shows the bundled translation and blue status marks", async ({ page }) => {
   await page.goto("/");
   const row = page.locator("[data-paper-id]", { hasText: "Demo (2024)" });
-  await expect(row).toContainText("Translation 16/16");
-  await expect(row).toContainText("Figure notes 3/3");
+  for (const name of ["In the output folder", "Translation 16/16", "Highlights", "Figure notes 3/3"])
+    await expect(row.getByRole("img", { name: new RegExp(`^${name}.*: done$`) })).toHaveClass(/\bon\b/);
+  const fresh = page.locator("[data-paper-id]", { hasText: "fresh" });
+  await expect(fresh.getByRole("img", { name: "In the output folder: not yet" })).not.toHaveClass(/\bon\b/);
   await row.getByRole("button", { name: "Open" }).click();
   await expect(page.locator('.tr-block[data-block-id="p1-b5"]')).toContainText("FooNet을 제안한다");
   await expect(page.locator('.tr-block[data-block-id="p1-b5"]')).not.toHaveClass(/untranslated/);

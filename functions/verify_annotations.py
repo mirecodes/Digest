@@ -3,7 +3,8 @@
   translation   .work/translate/pNNN.<lang>.md against pNNN.src.md (pages without one are just not done yet);
                 <lang> is target_lang from configs/cfg.yaml
   highlights    .work/highlights.md H blocks (big-picture key sentences): verbatim on their page and anchorable,
-                core categories covered, density; evidence quotes are not highlighted
+                core categories covered, each contribution (claim: C#) with its method and result, density;
+                evidence quotes are not highlighted
   figures       .work/figure_notes.md: one F block per figure in layout/figures.json, valid citation markers
 
 A missing highlights.md / figure_notes.md is "not generated yet", not an error. Every check that runs follows the
@@ -82,7 +83,7 @@ def _anchor(doc, page: int, quote: str):
 
 def check_highlights(work: Path, doc, pages: dict, lang: str, errors: list, warnings: list) -> list[dict]:
     """Anchored H blocks for the bundle, in file order."""
-    items = []
+    items, claims = [], {}
     md = read(work / "highlights.md")
     if md is None:
         return items
@@ -109,6 +110,15 @@ def check_highlights(work: Path, doc, pages: dict, lang: str, errors: list, warn
             warnings.append(f"{hid}: no note_{lang} (the one-line summary is what the reader sees first)")
         items.append({"id": hid, "category": h["category"], "page": h["page"], "rects": a["rects"],
                       "quote": h["quote"], "note_tr": h["note_tr"], "note_en": h["note_en"]})
+        if h["claim"]:
+            claims.setdefault(h["claim"], set()).add(h["category"])
+
+    # every contribution (claim: C#) is shown with how it works and the result that supports it
+    for claim, cats in sorted(claims.items()):
+        lacking = [c for c in ("contribution", "method", "result") if c not in cats]
+        if lacking:
+            warnings.append(f"highlights: {claim} has no {', '.join(lacking)} highlight "
+                            "(each contribution needs its own method and result)")
 
     covered = {item["category"] for item in items}
     missing = [c for c in CORE_CATEGORIES if c not in covered]

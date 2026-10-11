@@ -274,5 +274,31 @@
 - 모델 목록은 코드의 제안값(Claude: opus 5.5, sonnet 5.5, fable 5.1, haiku 4.5 ID)이고, Codex/Gemini는 모델명이 자주 바뀌어 제안 없이 직접 입력. `agent.models`로 목록을 바꿀 수 있다. CLI가 계정에서 쓸 수 있는 모델을 조회하는 공식 방법이 없어, "내 계정에서 되는 모델"은 실행 시 CLI가 판단한다 (안 되면 job 로그에 CLI 오류).
 - 서버는 모델명을 `MODEL_RE`(영숫자 . _ : / @ -)로, effort를 backend의 허용 목록으로 검사한다 (명령줄로 가는 값). job 로그 첫 줄에 선택값을 남긴다.
 
+### D4-11. 출력은 report 하나, 이름은 `<name> [summary].md` — 사용자 요청
+- 1페이지 summary를 없애고 상세 report만 쓴다. 파일명은 `<name> - report.md` 대신 `<name> [summary].md` (`verify.output_path`).
+- `templates/summary.md` 삭제, verify는 이 파일 하나만 검사. 기존 `- report.md` 폴더는 이름을 바꾸기 전까지 미완료로 보인다.
+
+### D4-12. 출력 트리는 src/를 따른다, 라이브러리 폴더 트리, 병렬·일괄 처리 — 사용자 요청
+- 새 논문은 원래부터 src/ 하위 경로를 따라 만들어졌다(`prepare.target_dir`). 추가: src/에서 PDF를 다른 폴더로 옮기면 출력 폴더도 따라간다 (`registry.relocate`). 실행 시점은 그 논문의 prepare, job이 없을 때 viewer의 목록 갱신, `registry.sh`. 실행 중인 job이 있으면 옮기지 않는다 (경로가 바뀌면 job이 깨진다). 목적지가 이미 있으면 그대로 둔다. 비워진 이전 폴더는 지운다.
+  - 결과: Obsidian에서 출력 폴더를 직접 옮겨도 src/ 위치로 되돌아간다. 구조를 바꾸려면 src/에서 옮긴다. 폴더가 옮겨지면 paper id(folder_rel 해시)도 바뀐다.
+  - CLI(`digest.sh`)와 viewer가 동시에 돌면 viewer가 CLI가 처리 중인 폴더를 옮길 수 있다 (viewer는 자기 job만 안다).
+- 라이브러리: 평평한 `h2` 그룹 대신 `<details>` 폴더 트리(중첩, 접기). 폴더 체크박스는 하위 전체 선택(부분 선택은 indeterminate), "Select all"은 검색 결과 전체. "Run on selected"는 선택 순서가 아니라 목록 순서로 큐에 넣고, 이미 끝난 단계·실행 중·evicted는 건너뛴다.
+- 병렬: `parallel`(cfg.yaml, 1..10, 기본 3)개 worker thread. 사용자가 5? 10?을 물어 상한 10. 각 job은 별도 에이전트 세션이라 요금제 rate limit이 실제 한계다. 값을 올리면 다음 submit에 반영, 내리면 재시작 후.
+- job 진행 표시: 페이지당 job별 SSE(`/api/jobs/{id}/events`)를 없애고 `GET /api/jobs` 1초 폴링 하나로. HTTP/1.1 브라우저 동시 연결 6개 제한과 서버 스레드 점유 때문. 덤으로 새로고침해도 이번 서버 실행의 로그가 다시 보인다.
+- job 로그 파일명에 job id 추가 (같은 초에 시작한 새 논문 job들이 `.paper-jobs/`에서 같은 파일을 쓰지 않게).
+- CLI `digest.sh`/`annotate.sh`는 여전히 한 번에 한 논문.
+
+### D4-13. VS Code식 트리, 원형 선택, 끊긴 job 이어하기, Process 3단계 — 사용자 요청
+- 라이브러리는 `<details>` 카드 목록 대신 평평한 행의 트리: 들여쓰기 16px/단계, 부모 chevron 아래 1px 가이드(배경 gradient), 폴더 접힘 상태는 localStorage. 선택은 오른쪽 끝 원형 체크(`role=checkbox`, 폴더 부분 선택은 mixed), 선택된 행은 줄 전체 `--accent-soft`. 행이 한 줄이라 라이브러리 폭 720 → 960px, 760px 미만에선 칩을 숨긴다.
+- Process: Summary / Translation / Annotation(= highlights + figures, `annotate.sh --only highlights,figures`). 요청은 "3가지"였지만 Run all은 단계가 아니라 묶음이라 맨 위에 남겼다. API action: `all | digest | translation | annotation`.
+- job 상태 저장: 논문별 최신 job을 `<out_root>/.paper-jobs/jobs.json`에 기록(원자적 쓰기). 서버 시작 시 queued/running으로 남은 job은 `interrupted`("Stopped while running")로 복원, 로그 끝 200줄과 함께. 정상 종료(Ctrl+C) 중 끊긴 job도 interrupted. 에이전트가 실패하면(API 끊김 등) `failed`.
+- job은 paper id 대신 PDF sha로 키를 잡는다(`PaperEntry.sha`): 새 논문이 준비되거나 폴더가 옮겨져 id가 바뀌어도, 재시작 후에도 같은 논문을 찾는다. paper id 자체는 viewer.json과 URL에 쓰이므로 그대로 둔다.
+- Resume = 같은 action·model·effort로 다시 실행 + `--resume`. 스크립트(`digest.sh`, `annotate.sh`)와 두 skill이 이를 받아 verify를 통과한 작업(번역 페이지, evidence, F 블록, highlights)은 두고 나머지만 한다. 에이전트 세션 자체를 잇는(`claude --resume`) 방식은 백엔드마다 달라 쓰지 않았다. 결과물이 파일이고 verify가 완료를 판단하므로 파일 기준으로 잇는다.
+
+### D4-14. 상태 아이콘, 진행 바, 논증 구조 기반 하이라이트 — 사용자 요청
+- 논문 행의 칩(Summary PASS, Translation n/n, Highlights n, Figure notes n/n)을 선 아이콘 4개로 바꿨다: 출력 폴더에 준비됨 / 번역 완료 / 하이라이트 있음 / figure note 완료. 미완료는 회색 선, 완료는 `--accent` 선. 숫자는 tooltip과 aria-label("Translation 120/248: not yet")에 남긴다. 요청한 4개에 Summary가 없어 행에서 Summary 상태는 빠졌다. Process 메뉴의 체크 표시로는 여전히 볼 수 있다. New·iCloud 칩은 상태 경고라 유지. 760px 미만에선 이름이 첫 줄, 아이콘·버튼이 둘째 줄 오른쪽.
+- 진행 바(검색창 아래): job에 `submitted / started / ended`(epoch 초)를 더해 `/api/jobs`와 jobs.json에 싣는다. 한 "실행"은 queued/running job 전부와, 그중 가장 이른 제출 시각 뒤에 끝난 job이다(그래서 새로고침이나 재시작 뒤에도 서버 데이터만으로 계산된다). 남은 시간은 이번 실행에서 성공한 job의 평균 소요 시간 × 남은 작업량 ÷ min(parallel, 남은 job 수)다. 첫 job이 끝나기 전에는 "Estimating…"을 보인다. 단계(요약·번역)가 달라도 평균 하나만 쓰는 대략값이다. 계산은 `web/src/pages/progress.ts`에 있고 unit test로 확인한다.
+- 하이라이트: 실제 결과(RMA)는 문장 하나하나는 맞지만, 카테고리별로 따로 골라 기여–방법–결과의 연결이 없었고, 본문 중간(방법 세부, 실험)이 비어 PDF 위에서는 흩어져 보였다. skill 6단계를 4 pass로 다시 정의했다. (1) highlights.md 맨 위에 `## Reading map`(Thesis, Problem, Gap, 기여별 `C#: … | how: … | shown by: …`, Scope, Insight, Limits)을 먼저 쓴다. (2) map 줄마다 찾을 섹션과 cue phrase 표를 따라 한 문장에 앵커한다. how는 방법 섹션, shown by는 실험 섹션에서 찾고, abstract는 최대 2개다. (3) 필요·구체·자기완결·비중복 네 가지 기준으로 거른다. (4) 메모만 순서대로 읽어 초록이 되는지 감사한다. H 블록에 `claim: C#`을 달고, verify_annotations는 C#마다 contribution·method·result 하이라이트가 없으면 WARN을 낸다. viewer는 Reading map과 claim을 무시하므로 viewer.json 스키마는 그대로다. 기존 highlights.md는 그대로 유효하다. 새 방식으로 바꾸려면 `Process ▸ Annotation`이나 `annotate.sh --only highlights`로 다시 만든다.
+
 ### D4-6. 남은 Phase 4 항목
 - 피규어 bbox 수정(`PUT …/bbox`, figure_overrides.json)은 아직 구현하지 않았다. 요청 범위(보기)에 없었고, 실측 low_conf 0이라 급하지 않다.

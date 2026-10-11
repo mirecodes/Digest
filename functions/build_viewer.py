@@ -37,7 +37,7 @@ def viewer_root() -> Path:
 def report_meta(paper_dir: Path) -> dict:
     """Title, authors, venue/year from the report header ("# Title" and "> Authors · Venue, Year [E1, p.1]")."""
     meta = {"title": None, "authors": None, "venue_year": None}
-    report = output_path(paper_dir, "report")
+    report = output_path(paper_dir)
     if not report.is_file():
         return meta
     for line in report.read_text(encoding="utf-8").splitlines()[:10]:
@@ -53,7 +53,7 @@ def inputs(paper_dir: Path) -> list[Path]:
     """Files whose change makes viewer.json stale."""
     work = paper_dir / WORK_DIR
     files = [find_pdf(paper_dir), work / "layout" / "blocks.json", work / "layout" / "figures.json",
-             output_path(paper_dir, "report"), work / "evidence.md", work / "highlights.md", work / "figure_notes.md",
+             output_path(paper_dir), work / "evidence.md", work / "highlights.md", work / "figure_notes.md",
              work / "viewer" / "figure_overrides.json"]
     return [f for f in files if f and f.exists()] + tr_files(work)
 

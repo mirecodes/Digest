@@ -2,9 +2,9 @@
 
 Checks that:
   1. every evidence quote in .work/evidence.md exists verbatim on its stated page of .work/pages.md;
-  2. every [E#, p.N] citation in "<name> - report.md" and "<name> - summary.md" points to an existing
+  2. every [E#, p.N] citation in "<name> [summary].md" points to an existing
      evidence block and page (<name> is the paper folder name);
-  3. each output contains a Korean and an English section, citing the same evidence IDs;
+  3. the output contains a Korean and an English section, citing the same evidence IDs;
   4. no number appears without a citation outside exempt sections (warning).
 
 Usage (via wrapper): scripts/internal/verify.sh "<paper_dir>" [--evidence-only]
@@ -30,7 +30,6 @@ EXEMPT_HEADING_RE = re.compile(r"comment|discussion|sources|코멘트|토론|출
 EXEMPT_TAGS = ("[INTERP]", "[EXT]", "[CALC:")
 # Paper folder layout. Obsidian does not index dot-folders, so work files stay out of the vault search.
 WORK_DIR = ".work"
-OUTPUT_KINDS = ("report", "summary")
 LANGS = ("ko", "en")
 MIN_QUOTE_LEN = 15  # characters after loose normalization
 
@@ -127,9 +126,9 @@ def check_output(path: Path, evidence: dict, errors: list, warnings: list) -> No
             warnings.append(f"{path.name}: numbers differ between Korean and English versions: {sorted(diff)}")
 
 
-def output_path(paper_dir: Path, kind: str) -> Path:
-    """"<name> - report.md": named after the paper so each note is unique in Obsidian search."""
-    return paper_dir / f"{paper_dir.name} - {kind}.md"
+def output_path(paper_dir: Path) -> Path:
+    """"<name> [summary].md": named after the paper so each note is unique in Obsidian search."""
+    return paper_dir / f"{paper_dir.name} [summary].md"
 
 
 def verify_paper(paper_dir: Path, evidence_only: bool = False) -> tuple[list, list, int]:
@@ -147,8 +146,7 @@ def verify_paper(paper_dir: Path, evidence_only: bool = False) -> tuple[list, li
         errors.append("no evidence blocks ('### E1' ...) found in evidence.md")
     check_evidence(evidence, pages, errors, warnings)
     if not evidence_only:
-        for kind in OUTPUT_KINDS:
-            check_output(output_path(paper_dir, kind), evidence, errors, warnings)
+        check_output(output_path(paper_dir), evidence, errors, warnings)
     return errors, warnings, len(evidence)
 
 

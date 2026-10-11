@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import pymupdf
@@ -20,8 +21,8 @@ from functions.layout import build_layout
 from functions.paper_name import Meta, find_arxiv_id, format_name
 from functions.papers import paper_id, resolve_for_annotate, scan
 from functions.prepare import EXIT_DONE, SRC_DIR, prepare_one, select, target_dir
-from functions.registry import REGISTRY, done_sources, folder_for, library, sync
-from functions.verify import OUTPUT_KINDS, WORK_DIR, output_path, verify_paper
+from functions.registry import REGISTRY, done_sources, folder_for, library, relocate, sync
+from functions.verify import WORK_DIR, output_path, verify_paper
 
 GOOD_EVIDENCE = """### E1
 - category: problem
@@ -96,9 +97,7 @@ def build_paper(root: Path) -> tuple[Path, dict]:
 
 def write_case(paper: Path, evidence: str, report: str) -> None:
     (paper / WORK_DIR / "evidence.md").write_text(evidence, encoding="utf-8")
-    # The summary uses the same format and checks, so the report doubles as the summary here.
-    for kind in OUTPUT_KINDS:
-        output_path(paper, kind).write_text(report, encoding="utf-8")
+    output_path(paper).write_text(report, encoding="utf-8")
 
 
 def check_naming(failures: list) -> None:
@@ -110,7 +109,7 @@ def check_naming(failures: list) -> None:
         (find_arxiv_id("paper", "see arXiv:1901.07517v1 [cs.RO]", None), "1901.07517"),
         (target_dir(SRC_DIR / "rsl" / "x.pdf", "N (2019)", Path("/o")), Path("/o/rsl/N (2019)")),
         (target_dir(Path("/elsewhere/x.pdf"), "N", Path("/o")), Path("/o/N")),
-        (output_path(Path("/o/N (2019)"), "report"), Path("/o/N (2019)/N (2019) - report.md")),
+        (output_path(Path("/o/N (2019)")), Path("/o/N (2019)/N (2019) [summary].md")),
     ]
     for got, want in cases:
         if got != want:
@@ -129,6 +128,10 @@ AGENT_EXPECT = {   # backend -> fragments its command line must contain (scripts
 
 def check_agent(failures: list) -> None:
     import subprocess
+    from functions.viewer.jobs import parallel
+    got = [parallel({"parallel": v}) for v in (None, 0, 1, 5, 50, "x")]
+    if got != [3, 3, 1, 5, 10, 3]:
+        failures.append(f"parallel: expected the default 3 and clamping to 1..10, got {got}")
     script = Path(__file__).resolve().parent.parent / "scripts" / "internal" / "agent.sh"
     for backend, fragments in AGENT_EXPECT.items():
         r = subprocess.run([str(script), "--dry-run", "paper-digest", '-n "x.pdf"'], capture_output=True, text=True,
@@ -299,12 +302,13 @@ def check_annotations(root: Path, failures: list) -> None:
         failures.append(f"build_viewer: bundle differs from {GOLDEN.name} in {diff} "
                         "(if the schema changed on purpose: scripts/internal/build_viewer.sh --update-golden)")
 
-    (paper / WORK_DIR / "highlights.md").write_text("### H1\n- category: result\n- page: 2\n"
+    (paper / WORK_DIR / "highlights.md").write_text("### H1\n- category: result\n- page: 2\n- claim: c2\n"
                                                    '- quote: "the router feeds the sparse attention block and the output head"\n',
                                                    encoding="utf-8")
     w = verify_annotations(paper, ["highlights"])["warnings"]
-    if not any("no problem, prior_work, contribution, method highlight" in x for x in w) or not any("no note_" in x for x in w):
-        failures.append(f"verify_annotations: expected coverage and missing-note warnings, got {w}")
+    if not any("no problem, prior_work, contribution, method highlight" in x for x in w) or not any("no note_" in x for x in w) \
+            or not any("C2 has no contribution, method highlight" in x for x in w):
+        failures.append(f"verify_annotations: expected coverage, missing-note and per-contribution warnings, got {w}")
 
     write_annotations(paper, "bad")
     r = verify_annotations(paper)
@@ -347,20 +351,35 @@ def check_registry(root: Path, paper: Path, src: Path, failures: list) -> None:
     fresh = src / "inbox" / "fresh.pdf"
     with contextlib.redirect_stdout(io.StringIO()) as out:
         codes = [prepare_one(fresh, cfg, args, papers)]
-        made = folder_for(fresh, root, src)
+        # target_dir mirrors the project's src/, not this test's, so the next call moves the folder to inbox/
         codes.append(prepare_one(fresh, cfg, args, sync(root, src)[0]))
+        made = folder_for(fresh, root, src)
         if made:
-            output_path(made, "report").write_text("> verify: PASS\n", encoding="utf-8")
+            output_path(made).write_text("> verify: PASS\n", encoding="utf-8")
         codes.append(prepare_one(fresh, cfg, args, sync(root, src)[0]))
         # --ensure (first step of every job): an already digested paper is simply ready
         codes.append(prepare_one(fresh, cfg, Namespace(force=False, dry_run=False, offline=True, ensure=True),
                                  sync(root, src)[0]))
-    if not fresh.is_file() or made is None or codes != [0, 0, EXIT_DONE, 0] or "resuming" not in out.getvalue():
+    if not fresh.is_file() or made is None or made.parent != root / "inbox" or codes != [0, 0, EXIT_DONE, 0] \
+            or "resuming" not in out.getvalue():
         failures.append(f"prepare: expected copy, resume, already-digested, ensure-ready; got codes {codes}, "
                         f"folder {made}, src kept {fresh.is_file()}")
     elif made:
         shutil.rmtree(made)     # leave the tree as the server check expects it
         sync(root, src)
+
+    # the output tree mirrors src/: a PDF moved to another src/ folder takes its output folder along, and back
+    with contextlib.redirect_stdout(io.StringIO()):
+        (src / "moved").mkdir()
+        (src / "dup.pdf").rename(src / "moved" / "dup.pdf")
+        there = relocate(root, sync(root, src)[0]) and (root / "moved" / paper.name / WORK_DIR / "pages.md").is_file()
+        (src / "moved" / "dup.pdf").rename(src / "dup.pdf")
+        back = relocate(root, sync(root, src)[0]) and (paper / WORK_DIR / "pages.md").is_file()
+        (src / "moved").rmdir()
+        again = relocate(root, sync(root, src)[0])
+    if not there or not back or again or (root / "moved").exists():
+        failures.append(f"registry: relocate should follow src/ (moved {there}, back {back}, idle {not again}, "
+                        f"empty folder left {(root / 'moved').exists()})")
 
 
 def check_server(root: Path, src: Path, failures: list) -> None:
@@ -405,8 +424,9 @@ def check_server(root: Path, src: Path, failures: list) -> None:
     run = lambda url, action, **agent: client.post(f"{url}/run", json={"action": action, **agent})
     cases = [
         (run(api, "everything").status_code, 422, "unknown action"),
-        (run(api, "figures", model="x; rm -rf ~").status_code, 400, "model name with shell characters"),
-        (run(api, "figures", effort="turbo").status_code, 400, "unknown effort"),
+        (run(api, "figures").status_code, 422, "old action name (now annotation)"),
+        (run(api, "annotation", model="x; rm -rf ~").status_code, 400, "model name with shell characters"),
+        (run(api, "annotation", effort="turbo").status_code, 400, "unknown effort"),
         (client.get(f"{new_api}/pdf").status_code, 409, "pdf of a new paper"),
     ]
     for got, want, name in cases:
@@ -417,17 +437,61 @@ def check_server(root: Path, src: Path, failures: list) -> None:
     for url, action, agent, expected in [
         (new_api, "translation", {}, [prep, f"stub annotate.sh -n {fresh} --only translation"]),
         (new_api, "all", {}, [prep, f"stub digest.sh -n {fresh}", f"stub annotate.sh -n {fresh}"]),
-        (api, "figures", {"model": "claude-opus-5-5", "effort": "high"},
+        (api, "annotation", {"model": "claude-opus-5-5", "effort": "high"},
          ["[job] PAPER_AGENT_EFFORT=high  PAPER_AGENT_MODEL=claude-opus-5-5", "stub internal/prepare.sh --ensure -n ",
-          f"stub annotate.sh -n {root / 'Demo (2024)'} --only figures"]),
+          f"stub annotate.sh -n {root / 'Demo (2024)'} --only highlights,figures"]),
+        # Resume: the same steps, each agent step told to keep the finished work
+        (new_api, "translation", {"resume": True}, [f"stub annotate.sh -n {fresh} --only translation --resume"]),
+        (new_api, "digest", {"resume": True}, [f"stub digest.sh -n {fresh} --resume"]),
     ]:
-        job = run(url, action, **agent).json()
-        events = client.get(f"/api/jobs/{job.get('job_id')}/events").text
-        if any(e not in events for e in expected) or \
-                'event: done\ndata: {"status": "done", "returncode": 0}' not in events:
-            failures.append(f"server: {action} job stream unexpected: {events[:400]!r}")
-    if client.get("/api/jobs/nope/events").status_code != 404:
-        failures.append("server: unknown job should be 404")
+        job_id = run(url, action, **agent).json().get("job_id")
+        for _ in range(100):        # the library polls /api/jobs the same way
+            job = next((j for j in client.get("/api/jobs").json() if j["id"] == job_id), {})
+            if job.get("status") in ("done", "failed"):
+                break
+            time.sleep(0.1)
+        log = "\n".join(job.get("lines", []))
+        # submitted <= started <= ended drive the library's progress bar and time estimate
+        times = [job.get(k) for k in ("submitted", "started", "ended")]
+        if any(e not in log for e in expected) or job.get("status") != "done" or \
+                job.get("model") != agent.get("model", "") or None in times or times != sorted(times):
+            failures.append(f"server: {action} job unexpected: {job.get('status')} {log[:400]!r}")
+    check_job_restore(root / "restore", failures)
+
+
+def check_job_restore(tmp: Path, failures: list) -> None:
+    """A job cut off by a viewer stop comes back `interrupted` with its log: from the state file after a hard stop,
+    and from a shutdown while it runs."""
+    from functions.viewer.jobs import INTERRUPTED_NOTE, Jobs
+    tmp.mkdir()
+    state, log = tmp / "jobs.json", tmp / "cut.log"
+    log.write_text("[job] step 2/2: digest.sh\nhalf done\n", encoding="utf-8")
+    state.write_text(json.dumps({"k": {"id": "cut0", "key": "k", "action": "digest", "status": "running",
+                                       "env": {"PAPER_AGENT_MODEL": "m"}, "log": str(log)}}), encoding="utf-8")
+    jobs = Jobs()
+    jobs.restore(state)
+    got = jobs.all()
+    if len(got) != 1 or got[0].status != "interrupted" or got[0].lines[-2:] != ["half done", INTERRUPTED_NOTE] or \
+            got[0].env != {"PAPER_AGENT_MODEL": "m"} or json.loads(state.read_text())["k"]["status"] != "interrupted":
+        failures.append(f"jobs: a running job in the state file should come back interrupted, got {got}")
+
+    stub = os.environ["PAPER_VIEWER_JOB_CMD"]
+    os.environ["PAPER_VIEWER_JOB_CMD"] = f'"{sys.executable}" -c "import time; print(\'working\', flush=True); time.sleep(30)"'
+    try:
+        job = jobs.submit("k2", "translation", [("annotate.sh", [])], tmp)
+        for _ in range(100):
+            if job.lines[-1:] == ["working"]:
+                break
+            time.sleep(0.05)
+        jobs.shutdown()
+        for _ in range(100):
+            if job.finished:
+                break
+            time.sleep(0.05)
+    finally:
+        os.environ["PAPER_VIEWER_JOB_CMD"] = stub
+    if job.status != "interrupted" or json.loads(state.read_text()).get("k2", {}).get("status") != "interrupted":
+        failures.append(f"jobs: a job running at shutdown should end interrupted, got {job.status}")
 
 
 def main() -> int:
