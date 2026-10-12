@@ -18,6 +18,9 @@ Input: `$ARGUMENTS`
   ERROR and at least 8 H blocks, and each F block without an ERROR (write only the missing or failing ones).
 
 All commands go through `scripts/internal/*.sh` (project `.venv`). Paths contain spaces: always quote them.
+Shell state does not carry over between commands: write the full quoted path in each one, never a variable set
+earlier. The rules here are all you need to pass the checks; do not read `functions/` to work out their messages.
+Do the work yourself in this session, without subagents.
 Below, `<paper>` is the paper folder, `<work>` is `<paper>/.work`, `<name>` is the folder name, and `<lang>` is
 the target language code printed by layout.sh (e.g. `ko`). "Target language" means that language.
 
@@ -36,7 +39,7 @@ Write only these files: `<work>/translate/glossary.md`, `<work>/translate/pNNN.<
 ## Steps
 
 Parts: **translation** = steps 3–5, **highlights** = step 6, **figures** = step 7. Steps 1, 2, 8, 9, 10 always run
-(step 2 reads only what the selected parts need: translation and figures need all of pages.md, highlights too).
+(step 2 reads only what the selected parts need: every part needs the whole paper text).
 
 ### 1. Resolve, lay out, pick the parts
 Run `scripts/internal/layout.sh "NAME"` with the `-n` value. It prints `[layout] folder: <paper>` — use that path
@@ -47,8 +50,16 @@ translation `N/N`, highlights with at least 8 H blocks (an older highlights.md w
 figure notes `N/N`. If all three are complete, go to step 9.
 
 ### 2. Read context
-`<work>/pages.md` (all of it, in chunks) and `<work>/layout/figures.json`; plus, when they exist,
-the report `<name> [summary].md` (its Glossary section especially), and `<work>/evidence.md`.
+Read everything in one turn (consecutive line ranges requested together when a file is too long for one Read):
+- The paper text, once. When translation is one of the parts: every `<work>/translate/pNNN.src.md` (the same text as
+  pages.md, split into the blocks you translate; the page is the file's number). Otherwise: `<work>/pages.md`.
+  Quotes copied from either pass the checks, which compare only letters and digits; a highlight that crosses a block
+  boundary, check it in pages.md.
+- `<work>/layout/figures.json` and the three templates.
+- The report `<name> [summary].md` if it exists: only the `<!-- LANG: <lang> -->` version, or the English one when
+  there is none (both say the same; `grep -n "LANG:"` gives the line ranges). Its Glossary section especially.
+- `<work>/evidence.md` is not read whole: the report already cites it as `[E#, p.N]`; grep it for a number or an
+  E# when a figure note or highlight note needs one.
 
 ### 3. Glossary → `<work>/translate/glossary.md`
 One line per term: `English → <target-language term>` (keep the English term when it is conventionally

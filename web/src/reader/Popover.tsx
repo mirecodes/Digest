@@ -92,7 +92,6 @@ function FigureNote({ f, pinned }: { f: Figure; pinned: boolean }) {
         <p className="muted">{note?.status === "SKIP" ? `${t("note_skipped")}${note.reason ? ` — ${note.reason}` : ""}` : t("no_note")}</p>
       )}
       {f.confidence < 0.6 && <p className="muted warn">{t("low_conf")}</p>}
-      {!pinned && <p className="hint">{t("pin_hint")}</p>}
     </>
   );
 }
@@ -149,7 +148,7 @@ export default function Popover({ clientBox, scroller }: Props) {
     if (!pop?.pinned) return;
     const outside = (e: PointerEvent) => {
       const el = e.target as Element;
-      if (!ref.current?.contains(el) && !el.closest?.(".fig-badge")) closePop();
+      if (!ref.current?.contains(el) && !el.closest?.(".pdf-page-inner")) closePop(); // PdfPage handles its own clicks
     };
     document.addEventListener("pointerdown", outside);
     return () => document.removeEventListener("pointerdown", outside);

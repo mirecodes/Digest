@@ -19,6 +19,8 @@ verify it with a script, then write the report from verified evidence only. Neve
 
 All commands go through `scripts/internal/*.sh`, which use the project `.venv`.
 Never call the system `python` directly. If a script reports that `.venv` is missing, run `scripts/setup.sh`.
+Shell state does not carry over between commands: write the full quoted path in each one, never a variable set
+earlier. The rules below are all you need to pass verify.sh; do not read `functions/` to work out its messages.
 
 ## Procedure
 
@@ -40,7 +42,8 @@ Never call the system `python` directly. If a script reports that `.venv` is mis
    not the page numbers printed in the PDF.
 
 ### 2. Read
-- Read all of `.work/pages.md`, in chunks, from start to end. Do not write from the abstract alone.
+- Read all of `.work/pages.md`, from start to end, in one turn: one Read if it fits, otherwise consecutive line
+  ranges requested together (with captions.md and the two templates). Do not write from the abstract alone.
 - Use `.work/captions.md` to locate key figures and tables.
 - Table columns can get mixed up during extraction. If the row/column mapping is unclear,
   write `table parsing uncertain` in that evidence block's note.
@@ -54,7 +57,8 @@ Follow `.claude/skills/paper-digest/templates/evidence.md`.
 ### 4. Verify evidence
 Run `scripts/internal/verify.sh "<paper>" --evidence-only` and fix until there are no ERRORs.
 "quote not found" means the quote was invented or paraphrased: find the exact text in pages.md,
-or delete the block if it does not exist.
+or delete the block if it does not exist. Matching compares only letters and digits (case, spaces, line breaks,
+hyphenation and symbols are ignored), so a quote fails only when its words differ from the page.
 
 ### 5. Write the report → `<name> [summary].md`
 The exact file name matters: verify.sh looks for it, and it keeps notes unique in Obsidian search.
@@ -70,6 +74,8 @@ Run `scripts/internal/verify.sh "<paper>"`.
 - Fix every ERROR. If ERRORs remain after 3 rounds, report them to the user as they are.
 - For each WARN "number without a source": add a citation, or tag it `[INTERP]` (opinion) or `[CALC: ...]` (computed).
 - For WARN "numbers differ between Korean and English": make the two versions match.
+- WARN "cites NOT_REPORTED evidence" is a reminder that stays on every such line: check that the sentence says
+  "not reported" / "논문에 명시되지 않음", then move on.
 
 ### 7. Report back
 Tell the user briefly, per paper: the paper folder, verify result (PASS/FAIL, warning count),

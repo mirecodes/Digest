@@ -305,13 +305,14 @@ input:focus { outline: 2px solid var(--accent); outline-offset: 0; background: v
   overflow: hidden; --scale-round-x: 1px; --scale-round-y: 1px;
 }
 .pdf-page-inner { position: absolute; inset: 0; }
-.pdf-page canvas { position: absolute; left: 0; top: 0; }
+.pdf-canvas, .pdf-canvas canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.over-figure, .over-figure .textLayer :is(span, br) { cursor: pointer; }
 .overlay { position: absolute; inset: 0; pointer-events: none; }
 .block-link { position: absolute; outline: 2px solid var(--link-outline); border-radius: 3px; background: var(--link-bg); }
 .flash { position: absolute; background: var(--flash); border-radius: 3px; animation: flash 0.9s ease-out forwards; }
 @keyframes flash { 0%, 35% { opacity: 1; } 100% { opacity: 0; } }
 
-/* ---- highlights and figure badges (overlay: pointer-events none except the badges) */
+/* ---- highlights and low-confidence figure boxes (overlay: pointer-events none) */
 .hl-problem { --c: var(--hl-problem); }
 .hl-assumption { --c: var(--hl-assumption); }
 .hl-prior_work { --c: var(--hl-prior_work); }
@@ -323,13 +324,6 @@ input:focus { outline: 2px solid var(--accent); outline-offset: 0; background: v
 .hl { position: absolute; background: rgba(var(--c), var(--hl-alpha)); border-radius: 2px; mix-blend-mode: multiply; }
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: rgb(var(--c)); flex: none; }
 .fig-lowconf { position: absolute; outline: 1.5px dashed var(--warning); border-radius: 4px; }
-.fig-badge {
-  position: absolute; z-index: 3; pointer-events: auto; width: 22px; height: 22px; padding: 0; justify-content: center;
-  border-radius: 50%; font: italic 600 13px/1 Georgia, serif; background: rgba(255, 255, 255, 0.92); color: var(--text-muted);
-  box-shadow: 0 0 0 1px var(--border-strong), var(--shadow-card); opacity: 0.75;
-}
-.fig-badge.has-note { color: var(--accent-hover); box-shadow: 0 0 0 1px var(--accent), var(--shadow-card); }
-.fig-badge:hover { opacity: 1; background: var(--accent-soft); }
 
 /* ---- floating panel: figure note popover / highlight tooltip */
 .popover {
@@ -346,7 +340,6 @@ input:focus { outline: 2px solid var(--accent); outline-offset: 0; background: v
 .popover .summary { font-weight: 600; color: var(--text); }
 .popover .muted { color: var(--text-muted); }
 .popover .warn { color: #b36800; }
-.popover .hint { color: var(--text-dim); font-size: 12px; margin-bottom: 0; }
 .hl-tip { padding: 10px 12px; font-size: 13px; }
 .hl-tip header { margin-bottom: 2px; }
 .lang-toggle { display: inline-flex; background: var(--surface); border-radius: 6px; padding: 2px; }

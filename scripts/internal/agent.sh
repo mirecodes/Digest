@@ -5,7 +5,8 @@
 #   one-off model / effort: PAPER_AGENT_MODEL=claude-opus-5-5 PAPER_AGENT_EFFORT=high scripts/digest.sh
 #   --dry-run: print the command instead of running it (no CLI needed)
 # Backends (each CLI does its own login / API key handling; this script never sees a key):
-#   claude  Claude Code `claude -p`   skill as /SKILL; edits auto-accepted, Bash only for scripts/internal/*
+#   claude  Claude Code `claude -p`   skill as /SKILL; edits auto-accepted, Bash only for scripts/internal/*;
+#                                     no user plugins / hooks / MCP, file and shell tools only
 #   codex   Codex CLI   `codex exec`  workspace-write sandbox + out_dir, network on (arXiv/Crossref names)
 #   gemini  Gemini CLI  `gemini -p`   edits auto-approved, shell only for scripts/internal/ (configs/gemini-policy.toml)
 # Codex and Gemini read the skill file (.claude/skills/SKILL/SKILL.md) as their instructions and CLAUDE.md as rules.
@@ -66,7 +67,10 @@ run() {
 }
 case "$BACKEND" in
   claude)
+    # Token diet: skip user settings (plugins, their hooks and skill listings), MCP servers, and every tool the skills
+    # never use (subagents, web, tasks). Baseline context per turn ~29k -> ~8k tokens; the skill still expands.
     run claude -p "/$SKILL $ARGS" ${MODEL:+--model "$MODEL"} ${EFFORT:+--effort "$EFFORT"} --add-dir "$OUT" \
+      --setting-sources project,local --strict-mcp-config --tools "Bash,Read,Write,Edit,Glob,Grep" \
       --permission-mode acceptEdits --allowedTools "Bash(scripts/internal/*)" "Read" ;;
   codex)
     run codex exec --skip-git-repo-check --sandbox workspace-write -c approval_policy=never \

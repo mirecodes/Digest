@@ -1,16 +1,15 @@
 // Original PDF pane. All page placeholders are laid out at their exact size up front (sizes come from
-// viewer.json); only pages within ±2 of the viewport render a canvas and text layer (§8.2).
+// viewer.json); only pages near the viewport render a canvas and text layer (§8.2, lib/pageRender.keepRange).
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { PAGE_GAP, PANE_PAD, stackTops } from "../lib/coords";
 import { mapRef, pageAt, refPage, type PaneLayout } from "../lib/scrollSync";
 import { visible } from "../lib/highlights";
+import { keepRange } from "../lib/pageRender";
 import { useStore } from "../lib/store";
 import type { Block, Figure, Highlight, Rect } from "../types";
 import PdfPage from "./PdfPage";
 import Popover from "./Popover";
-
-const RENDER_MARGIN = 2; // pages rendered beyond the visible ones
 
 type Props = {
   doc: PDFDocumentProxy;
@@ -23,7 +22,7 @@ export default function PdfPane({ doc, elRef, onLayout }: Props) {
   const zoom = useStore((s) => s.zoom);
   const setPage = useStore((s) => s.setPage);
   const [width, setWidth] = useState(0);
-  const [range, setRange] = useState<[number, number]>([0, RENDER_MARGIN]);
+  const [range, setRange] = useState<[number, number]>([0, 2]);
 
   useLayoutEffect(() => {
     const el = elRef.current!;
@@ -76,8 +75,10 @@ export default function PdfPane({ doc, elRef, onLayout }: Props) {
     const update = () => {
       const first = pageAt(el.scrollTop, layout);
       const last = pageAt(el.scrollTop + el.clientHeight, layout);
-      const next: [number, number] = [Math.max(0, first - RENDER_MARGIN), Math.min(data.pages.length - 1, last + RENDER_MARGIN)];
-      setRange((r) => (r[0] === next[0] && r[1] === next[1] ? r : next));
+      setRange((r) => {
+        const next = keepRange(r, first, last, data.pages.length);
+        return r[0] === next[0] && r[1] === next[1] ? r : next;
+      });
       setPage(refPage(el, layout));
     };
     const onScroll = () => {

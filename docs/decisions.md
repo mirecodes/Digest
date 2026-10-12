@@ -307,5 +307,11 @@
 - 라이브러리 폭 960 → 1200px. 원형 선택과 Select all은 평소에 숨기고, 목록 우측 상단 **Select**를 누르면 나타난다. 다시 누르면(Done) 선택이 풀린다.
 - 행마다 있던 Process 메뉴를 없앴다. 선택 모드의 상단 **Process ▾** 메뉴가 선택한 논문에 바로 실행한다(step select + "Run on selected" 두 번 누르던 것을 한 번으로 줄였다). 각 항목 옆 숫자는 선택한 논문 중 그 단계가 남은 수이고, 0이면 체크 표시와 함께 비활성이다. 한 편만 처리할 때도 Select → 체크 → Process를 거친다.
 
+### D4-16. headless 에이전트 토큰 절감 — 사용자 요청
+- 실측 근거: 최근 `claude -p` 세션 transcript를 분석했다. 세션마다 시작 context가 ~29k token이었다. 사용자 plugin의 skill 목록(~10k), SessionStart hook 주입(~3k), MCP, deferred tool 목록이 원인이다. 이 context는 매 turn 다시 읽힌다. claude-mem hook은 Read/Bash마다 돌았다. annotate 한 번은 Workflow와 subagent 6개를 띄웠다. subagent마다 ~50k context로 새로 시작해서 cache_read가 세션당 ~1.6M 늘었다.
+- `agent.sh`(claude): `--setting-sources project,local --strict-mcp-config --tools "Bash,Read,Write,Edit,Glob,Grep"`. 시작 context는 28.6k → 7.6k(`/context`로 측정)다. `/SKILL` 확장은 그대로 동작한다(Skill tool 없이도 확인했다). 모델 기본값도 그대로다(opus). codex/gemini는 바꾸지 않았다.
+- skill 수정: (1) annotate에서 번역을 할 때는 pages.md 대신 `pNNN.src.md`만 읽는다. 같은 본문을 두 번 읽던 것으로, 26쪽 논문에서 ~35k token이었다. (2) 리포트는 한 언어 판만 읽는다. evidence.md는 통째로 읽지 않고 grep한다. (3) 긴 파일은 한 turn에 범위를 모아서 읽는다. 순차 chunk 읽기는 turn마다 context 전체를 다시 읽는다. (4) 따옴표 매칭 규칙(글자·숫자만 비교)과 NOT_REPORTED WARN의 뜻을 skill에 적었다. 그 전에는 대부분의 세션이 `functions/verify*.py`를 읽어 규칙을 알아냈다. (5) Bash 변수는 호출 사이에 남지 않는다고 적었다(`$P`가 비어 verify를 4번 다시 돌린 세션이 있었다).
+- 바꾸지 않은 것: figure crop 200 dpi(~1.5k px)는 API 이미지 한도 근처라, 더 줄이면 그래프 숫자 판독이 나빠진다. digest와 annotate를 한 세션으로 합치는 것은 context가 커져 오히려 turn당 비용이 오른다.
+
 ### D4-6. 남은 Phase 4 항목
 - 피규어 bbox 수정(`PUT …/bbox`, figure_overrides.json)은 아직 구현하지 않았다. 요청 범위(보기)에 없었고, 실측 low_conf 0이라 급하지 않다.
